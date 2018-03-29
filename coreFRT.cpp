@@ -8,8 +8,26 @@
 
 #define MAX_NUM_THREADS 20
 
+/*
+
+This function does the heavy lifting 
+of adding together rows with the correct shifts. 
+It leaves to MATLAB the job of creating matrices 
+in memory in the outside loop, as well as sending
+partial Radon matrices to the Finder, if needed. 
+
+This has a multithread mode but tests on my computers
+didn't show any substantial speed-up. 
+Probably due to the fact that fetching rows in memory
+takes more time than actually adding them. 
+Right now it is faster to just split a batch of images
+to different processes and do streak detection on each 
+sub-batch in parallel. 
+
+*/
+
 // function prototypes
-void shift_add(double *line_out, double *line_prev1, double *line_prev2, int N, int gap);
+void shift_add(double *line_out, double *line_prev1, double *line_prev2, int N, int gap); 
 void add_lines(double *M_out, double *M_prev, int *output_size, int *input_size, double *dy, int ij_start, int ij_end, int debug_level=0);
 
 void mexFunction( int nlhs, mxArray *plhs[],
@@ -66,32 +84,6 @@ void mexFunction( int nlhs, mxArray *plhs[],
 	if(num_threads<1){// single thread execution
 	
 		add_lines(M_out, M_prev, output_size, input_size, dy, 0, output_size[1]*output_size[2], debug_level);
-	
-		// int i_prev=0;
-		
-		// for(int i=0;i<output_size[1]; i++){
-			
-			// for(int j=0;j<output_size[2];j++){
-			
-				// int dy_prev=(int) trunc(dy[j]/2); // this is the shift value inside M_prev that we need
-				
-				// int j_prev=dy_prev+(int) floor(input_size[2]/2); // this is the index to use in M_prev's third dimension
-				
-				// int gap_y=(int) dy[j]-dy_prev; // this is the gap that remains (we need to shift this)
-				
-				// // find the pointers for the beginning of the correct lines in M_out and M_prev
-				// double *line_out=&M_out[i*output_size[0]+j*output_size[0]*output_size[1]];
-				// double *line_prev1=&M_prev[i_prev*input_size[0]+j_prev*input_size[0]*input_size[1]];
-				// double *line_prev2=&M_prev[(i_prev+1)*input_size[0]+j_prev*input_size[0]*input_size[1]];
-				
-				// // this just loops over the passive (common) axis and sums with the requested shift.
-				// shift_add(line_out, line_prev1, line_prev2, Npassive, -gap_y);
-						
-			// }// for j
-			
-			// i_prev+=2;
-			
-		// }// for i
 		
 	}
 	else{ // the multithreaded case
@@ -101,7 +93,6 @@ void mexFunction( int nlhs, mxArray *plhs[],
 
 		if(debug_level>0) printf("dividing %d lines between %d threads, each getting %d lines...\n", (int) total_lines, num_threads, num_lines_per_thread);
 		
-		// std::thread *thread_array=(std::thread*) malloc(sizeof(std::thread)*num_threads);
 		std::thread thread_array[MAX_NUM_THREADS];
 		
 		if(num_threads>MAX_NUM_THREADS){ num_threads=MAX_NUM_THREADS; printf("Number of threads requested (%d) exceeds built-in maximum (%d)\n", num_threads, MAX_NUM_THREADS); }

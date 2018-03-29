@@ -29,6 +29,12 @@ The three classes included in this package are:
     The simulator can make multiple streaks of different intensities and coordinates, 
     and can simulate random streaks with parameters chosen uniformly in a user-defined range. 
 
+An additional function, "coreFRT.mexw64" is available for running the core algorithm in C++. 
+This mex file is compile from "coreFRT.cpp" using "compile_core_frt_mex.m" from matlab. 
+There is no need for any special packages/compilers, but c++11 is assumed for all my projects. 
+Right now I've compiled the code under windows 64 bit. 
+For other OSes just use "compile_core_frt_mex.m". 
+
 NOTE: this package requires the +util package. 
       Available on github: https://github.com/guynir42/util
 
