@@ -117,13 +117,14 @@ classdef Simulator < handle
         line_midpoint_x; % in normalized units
         line_midpoint_y; % in normalized units
         line_x0; % in normalized units
-        line_a; 
-        line_b; % in normalized units
+        line_a; % slope parameter: a=tan(theta)
+        line_b; % intercept parameter, in normalized units
         
     end
     
     properties(Hidden=true)
        
+        % these are filled with default values at construction
         default_im_size;
         default_intensity;
         default_bg_noise_var;
@@ -141,13 +142,13 @@ classdef Simulator < handle
         
         intensity_private = 10; % this allows us to increase the number of lines and just copy the last "intensity" value to 0
         
+        % real coordinates of the streak start/end points (normalized units)
         x1 = 0.1;
         y1 = 0;
         x2 = 0.9;
         y2 = 1;
         
-        anchor_list = {'start', 'end', 'middle'};
-        
+        anchor_list = {'start', 'end', 'middle'};        
         display_what_list = {'final', 'conv', 'line'};
         
         version = 1.04;
@@ -158,23 +159,24 @@ classdef Simulator < handle
         
         function obj = Simulator(other)
             
-            if nargin>0 && ~isempty(other) && isa(other, 'radon.Simulator');
+            if nargin>0 && ~isempty(other) && isa(other, 'radon.Simulator') % copy-constructor
                 if obj.debug_bit, fprintf('Simulator copy-constructor v%4.2f\n', obj.version); end
                 obj = util.oop.full_copy(other);
-                return;
+            else
+            
+                if nargin>0 && ~isempty(other) && isa(other, 'radon.Finder') % use this to give an existing Finder
+                    obj.finder = other; 
+                else
+                    obj.finder = radon.Finder;
+                end
+
+                if obj.debug_bit, fprintf('Simulator constructor v%4.2f\n', obj.version); end
+
+                util.oop.save_defaults(obj); % put variable "X" inside "default_X"
+
+                obj.initialize;
+
             end
-            
-            if nargin>0 && ~isempty(other) && isa(other, 'radon.Finder')
-                obj.finder = other; 
-            end
-            
-            if obj.debug_bit, fprintf('Simulator constructor v%4.2f\n', obj.version); end
-            
-            util.oop.save_defaults(obj);
-            
-            obj.finder = radon.Finder;
-            
-            obj.initialize;
             
         end
         
@@ -184,7 +186,7 @@ classdef Simulator < handle
         
         function initialize(obj)
             
-            util.oop.load_defaults(obj);
+            util.oop.load_defaults(obj); % put variable "default_X" back to "X"
             
             obj.clear;
             
@@ -192,6 +194,7 @@ classdef Simulator < handle
         
         function clear(obj)
             
+            % get ready for a new image
             obj.image_line = [];
             obj.image_conv = [];
             obj.image_final = [];
@@ -203,7 +206,7 @@ classdef Simulator < handle
     
     methods % getters
         
-        function val = get.im_size(obj)
+        function val = get.im_size(obj) % make sure the im_size output as a 2-element vector
             
             val = util.vec.imsize(obj.im_size);
             
@@ -215,13 +218,13 @@ classdef Simulator < handle
             
         end
         
-        function val = get.intensity(obj)
+        function val = get.intensity(obj) 
            
             val = obj.intensity_private;
             
         end
         
-        function val = get.line_length(obj)
+        function val = get.line_length(obj) % normalized units
            
             if isempty(obj.x1) || isempty(obj.y1) || isempty(obj.x2) || isempty(obj.y2)
                 val = [];
@@ -231,7 +234,7 @@ classdef Simulator < handle
             
         end
         
-        function val = line_length_pixels(obj)
+        function val = line_length_pixels(obj) % pixel units
            
             if isempty(obj.line_length) || isempty(obj.im_size)
                 val = [];
@@ -243,7 +246,7 @@ classdef Simulator < handle
             
         end
         
-        function val = get.line_theta(obj)
+        function val = get.line_theta(obj) % degrees
            
             if isempty(obj.x1) || isempty(obj.y1) || isempty(obj.x2) || isempty(obj.y2)
                 val = [];
@@ -253,7 +256,7 @@ classdef Simulator < handle
             
         end
         
-        function val = get.line_midpoint_x(obj)
+        function val = get.line_midpoint_x(obj) % normalized units
             
             if isempty(obj.x1) || isempty(obj.x2)
                 val = [];
@@ -263,7 +266,7 @@ classdef Simulator < handle
             
         end
         
-        function val = line_midpoint_x_pixels(obj)
+        function val = line_midpoint_x_pixels(obj) % pixel units
            
             if isempty(obj.line_midpoint_x) || isempty(obj.im_size)
                 val = [];
@@ -273,7 +276,7 @@ classdef Simulator < handle
             
         end
         
-        function val = get.line_midpoint_y(obj)
+        function val = get.line_midpoint_y(obj) % normalized units
             
             if isempty(obj.y1) || isempty(obj.y2)
                 val = [];
@@ -283,7 +286,7 @@ classdef Simulator < handle
             
         end
         
-        function val = line_midpoint_y_pixels(obj)
+        function val = line_midpoint_y_pixels(obj) % pixel units
            
             if isempty(obj.line_midpoint_y) || isempty(obj.im_size)
                 val = [];
@@ -303,7 +306,7 @@ classdef Simulator < handle
             
         end
         
-        function val = get.line_b(obj)
+        function val = get.line_b(obj) % normalized units
            
             if isempty(obj.line_a)
                 val = [];
@@ -313,7 +316,7 @@ classdef Simulator < handle
             
         end
         
-        function val = line_b_pixels(obj)
+        function val = line_b_pixels(obj) % pixel units
            
             if isempty(obj.line_b) || isempty(obj.im_size)
                 val = [];
@@ -323,7 +326,7 @@ classdef Simulator < handle
             
         end
         
-        function val = get.line_x0(obj)
+        function val = get.line_x0(obj)  % normalized units
            
             if isempty(obj.line_a)
                 val = [];
@@ -333,7 +336,7 @@ classdef Simulator < handle
             
         end        
         
-        function val = line_x0_pixels(obj)
+        function val = line_x0_pixels(obj) % pixel units
            
             if isempty(obj.line_x0) || isempty(obj.im_size)
                 val = [];
@@ -343,7 +346,7 @@ classdef Simulator < handle
             
         end
         
-        function val = has_line(obj)
+        function val = has_line(obj) % make sure the (x,y) coordinates are not empty
             
             if isempty(obj.x1) || isempty(obj.x2) || isempty(obj.y1) || isempty(obj.y2)
                 val = 0;
@@ -353,7 +356,7 @@ classdef Simulator < handle
             
         end
         
-        function val = isVertical(obj, idx)
+        function val = isVertical(obj, idx) % for lines closer to vertical (>45 degrees)
             
             if nargin<2 
                 idx = [];
@@ -373,7 +376,7 @@ classdef Simulator < handle
         
     methods % setters
                 
-        function set.num_lines(obj, val)
+        function set.num_lines(obj, val) % makes sure all parameters (x, y, intensity, num_pixels) are vectors of the same length
            
             if val<1
                 val = 1;
@@ -589,7 +592,7 @@ classdef Simulator < handle
     
     methods % calculations
         
-        function val = trig_factor(obj, idx)
+        function val = trig_factor(obj, idx) % either sin(th) or cos(th), whichever is closer to 1
             
             if nargin<2 || isempty(idx)
                 idx = [];
@@ -603,7 +606,7 @@ classdef Simulator < handle
             
         end
         
-        function val = calcSNR(obj)
+        function val = calcSNR(obj) % what is the theoretical S/N for the given streaks
             
             L = obj.num_pixels./obj.trig_factor;
             
@@ -619,7 +622,7 @@ classdef Simulator < handle
             
         end
                 
-        function randomize(obj)
+        function randomize(obj) % generate random streaks from uniform distribution of parameters
            
             L = [];
             th = [];
@@ -671,7 +674,7 @@ classdef Simulator < handle
             
         end
         
-        function update_finder(obj)
+        function update_finder(obj) % give the Finder object the real variance and PSF 
             
             if obj.finder.noise_var~=obj.bg_noise_var
                 obj.finder.makeVarMap(obj.bg_noise_var);
@@ -681,7 +684,7 @@ classdef Simulator < handle
                         
         end
         
-        function run(obj)
+        function run(obj) % generate streak(s) and optionally pass them to the Finder
            
             if obj.use_random
                 obj.randomize;
@@ -706,7 +709,7 @@ classdef Simulator < handle
             
         end
         
-        function makeImage(obj)
+        function makeImage(obj) % fills the three images in turn: line, conv, final
             
             obj.drawLine;
             obj.runConv;
@@ -714,7 +717,7 @@ classdef Simulator < handle
             
         end
         
-        function [x_list, y_list] = listPixels(obj)
+        function [x_list, y_list] = listPixels(obj) % lists of x,y pixel coordinates of the streak(s) (uses "radon.listPixels")
             
             if isempty(obj.im_size)
                 error('cannot get list of pixels without image size!');
@@ -729,132 +732,11 @@ classdef Simulator < handle
             y1 = obj.y1.*obj.im_size(1);
             y2 = obj.y2.*obj.im_size(1);
             
-            [x_list, y_list, obj.num_pixels] = radon.listPixels(x1,x2,y1,y2,obj.im_size);
-            
-            return; 
-            % all of this has been moved to radon.listPixels
-            
-            x1 = obj.x1;
-            x2 = obj.x2;
-            y1 = obj.y1;
-            y2 = obj.y2;
-            
-            N = max([length(x1), length(x2), length(y1), length(y2)]);
-            
-            if length(x1)<N, x1 = [x1 ones(1, N-length(x1))*x1(end)]; end
-            if length(x2)<N, x2 = [x2 ones(1, N-length(x2))*x2(end)]; end
-            if length(y1)<N, y1 = [y1 ones(1, N-length(y1))*y1(end)]; end
-            if length(y2)<N, y2 = [y2 ones(1, N-length(y2))*y2(end)]; end
-            
-            for ii = 1:N
-                
-                % verify line is inside the frame at all! 
-                if x1(ii)<0 && x2(ii)<0, continue; end
-                if x1(ii)>1 && x2(ii)>1, continue; end
-                if y1(ii)<0 && y2(ii)<0, continue; end
-                if y1(ii)>1 && y2(ii)>1, continue; end
-                
-                % the positions in units of pixels (not rounded!)
-                pix_x1 = obj.im_size(2)*x1(ii);
-                pix_x2 = obj.im_size(2)*x2(ii);
-                pix_y1 = obj.im_size(1)*y1(ii);
-                pix_y2 = obj.im_size(1)*y2(ii);
-                
-                if obj.isVertical(ii)
-                    
-                    if pix_y1<pix_y2
-                        y = pix_y1:pix_y2; % not rounded!
-                        x = pix_x1+(y-pix_y1)./tand(obj.line_theta(ii)); % not rounded!
-                    else                    
-                        y = pix_y2:pix_y1; % not rounded!
-                        x = pix_x2+(y-pix_y2)./tand(obj.line_theta(ii)); % not rounded!
-                    end
-                    
-                    ind_low = find(y<0.5, 1, 'last');
-                    if isempty(ind_low), ind_low=0; end
-                    
-                    ind_high = find(y>obj.im_size(1)+0.5, 1, 'first');
-                    if isempty(ind_high), ind_high=length(y)+1; end
-                    
-                    y = y(ind_low+1:ind_high-1);
-                    x = x(ind_low+1:ind_high-1);
-                    
-                    if x(1)<x(end)
-                        
-                        ind_low = find(x<0.5, 1, 'last');
-                        if isempty(ind_low), ind_low=0; end
-                        
-                        ind_high = find(x>obj.im_size(2)+0.5, 1, 'first');
-                        if isempty(ind_high), ind_high=length(x)+1; end
-                        
-                    else
-                        
-                        ind_low = find(x<obj.im_size(2)+0.5, 1, 'first');
-                        if isempty(ind_low), ind_low=0; end
-                        
-                        ind_high = find(x>0.5, 1, 'last');
-                        if isempty(ind_high), ind_high=length(x)+1; end
-                        
-                    end
-                    
-                    y = y(ind_low+1:ind_high-1);
-                    x = x(ind_low+1:ind_high-1);
-                    
-                    x_list{ii} = round(x);
-                    y_list{ii} = round(y);
-                    
-                else
-                    
-                    if pix_x1<pix_x2
-                        x = pix_x1:pix_x2; % not rounded!
-                        y = pix_y1+(x-pix_x1)./cotd(obj.line_theta(ii)); % not rounded!
-                    else
-                        x = pix_x2:pix_x1; % not rounded!
-                        y = pix_y2+(x-pix_x2)./cotd(obj.line_theta(ii)); % not rounded!
-                    end
-                    
-                    ind_low = find(x<0.5, 1, 'last');
-                    if isempty(ind_low), ind_low=0; end
-                    
-                    ind_high = find(x>obj.im_size(2)+0.5, 1, 'first');
-                    if isempty(ind_high), ind_high=length(x)+1; end
-                    
-                    x = x(ind_low+1:ind_high-1);
-                    y = y(ind_low+1:ind_high-1);
-                    
-                    if y(1)<y(end)
-                        
-                        ind_low = find(y<0.5, 1, 'last');
-                        if isempty(ind_low), ind_low=0; end
-                        
-                        ind_high = find(y>obj.im_size(1)+0.5, 1, 'first');
-                        if isempty(ind_high), ind_high=length(y)+1; end
-                        
-                    else
-                        
-                        ind_low = find(y<obj.im_size(1)+0.5, 1, 'first');
-                        if isempty(ind_low), ind_low=0; end
-                        
-                        ind_high = find(y>0.5, 1, 'last');
-                        if isempty(ind_high), ind_high=length(y)+1; end
-                        
-                    end
-
-                    x = x(ind_low+1:ind_high-1);                
-                    y = y(ind_low+1:ind_high-1);
-
-                    x_list{ii} = round(x);
-                    y_list{ii} = round(y);
-                    
-                end
-
-                obj.num_pixels(ii) = numel(x_list{ii});
-                
-            end
+            [x_list, y_list, obj.num_pixels] = radon.listPixels(x1,x2,y1,y2,obj.im_size); % the radon.listPixels is used in other places as well
             
         end
                 
-        function drawLine(obj)
+        function drawLine(obj) % takes the list of x,y pixel coordinates and puts "intensity" in each pixel of the line
             
             obj.image_line = zeros(obj.im_size);
                 
@@ -880,24 +762,24 @@ classdef Simulator < handle
             
         end
         
-        function runConv(obj)
+        function runConv(obj) % convolve the image with the PSF
             
             if obj.use_psf
                 
-                if ~obj.use_external_psf
+                if ~obj.use_external_psf % automatically generate a PSF (deletes user-input PSF)
                     k = util.img.gaussian2(obj.psf_sigma);
                     obj.psf = k./util.stat.sum2(k);
                 end
                 
-                obj.image_conv = filter2(obj.psf, obj.image_line);
+                obj.image_conv = filter2(obj.psf, obj.image_line); % don't think we need util.fft.conv_f, the PSF is too small for FFT convolution. 
                 
             else
-                obj.image_conv = obj.image_line;
+                obj.image_conv = obj.image_line; % if no PSF is used, just copy "image_line"
             end
             
         end
         
-        function addNoise(obj)
+        function addNoise(obj) % add white Gaussian noise
             
             if obj.bg_noise_var>0
                 obj.image_final = normrnd(zeros(obj.im_size), sqrt(obj.bg_noise_var));
@@ -917,12 +799,12 @@ classdef Simulator < handle
     
     methods % plotting tools / GUI
         
-        function show(obj, varargin)
+        function show(obj, varargin) % display the image with streak(s) on it, and some statistics
             
             import util.text.*;
             
-            margin = [];
-            ax = [];
+            margin = []; % add margin to be able to draw lines outside the frame
+            ax = []; % by default us the GUI axes if it exists, otherwise gca
             font_size = 24;
             
             for ii = 1:2:length(varargin)
@@ -962,8 +844,6 @@ classdef Simulator < handle
             
             if margin>0
                 margin_pix = ceil(margin*obj.im_size);
-%                 I_margin = zeros(obj.im_size+margin_pix*2);
-%                 I = util.img.droptile(I_margin, I, size(I_margin)/2);
                 I = util.img.pad2size(I, obj.im_size+margin_pix*2);
                 xval = -margin_pix(2)+2:obj.im_size(2)+margin_pix(2)+1;
                 yval = -margin_pix(1)+2:obj.im_size(1)+margin_pix(1)+1;
@@ -972,6 +852,7 @@ classdef Simulator < handle
                 util.plot.show(I, varargin{:});
             end
             
+            % get the Finder results and show them also
             if obj.use_finder && ~isempty(obj.finder) && ~isempty(obj.finder.streaks)
                 
                 for ii = 1:length(obj.finder.streaks)
@@ -994,7 +875,7 @@ classdef Simulator < handle
             
         end
         
-        function makeGUI(obj)
+        function makeGUI(obj) % create a GUI object (if it is empty) and make a GUI
             
             if isempty(obj.gui)
                 obj.gui = radon.gui.SimGUI(obj);
@@ -1004,7 +885,7 @@ classdef Simulator < handle
             
         end
         
-        function pickPoints(obj, varargin)
+        function pickPoints(obj, varargin) % select points on the axes to make them into lines
             
             import util.text.*;
             
