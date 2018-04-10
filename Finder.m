@@ -65,7 +65,7 @@ classdef Finder < handle
         input_images; % if we are given the image in real space
         im_size; % can be input as scalar, will be output as two-element vector.
         
-        % variance:
+        % input var/psf:
         input_var; % original variance map/scalar 
         input_psf; % original PSF as given (or width parameter "sigma" of PSF)        
         
@@ -699,7 +699,7 @@ classdef Finder < handle
                     obj.snr_values = [obj.snr_values obj.bestSNR]; 
                 else
                     new_snr = max([util.stat.max2(obj.radon_image), util.stat.max2(obj.radon_image_trans)]); % take the best point of the final image
-                    obj.snr_value = [obj.snr_values new_snr];
+                    obj.snr_values = [obj.snr_values new_snr];
                 end
                 
                 obj.timing_data.start('show');

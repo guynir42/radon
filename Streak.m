@@ -1,7 +1,7 @@
 classdef Streak < handle
 % This object describes a single streak that is found using the FRT, 
 % including the raw results of the finding algorithm, and the streak 
-% parameters derived from the results 
+% parameters derived from the results. 
 % 
 % Usually a radon.Finder object will have a vector of these objects saved 
 % after it has finished going over some images. 
@@ -20,7 +20,7 @@ classdef Streak < handle
         im_size; % size of original image (after transposed, if used. can be different than size(input_image))
         
         input_image; % subtracted image given to finder
-        radon_image; % full radon image for the correct transposed
+        radon_image; % full Radon image for the correct transposed
         subframe; % subframe where the streak was located (for short streaks. Otherwise, the same as "radon_image")
         psf; % the PSF, after normalization, used for convolving the image (if any)
         
@@ -51,9 +51,9 @@ classdef Streak < handle
         % radon coordinates
         transposed = 0; % did we transposed the image before doing the FRT (i.e. larger than 45 degrees)
         radon_step; % what logarithmic step "m" in the algorithm was this detection
-        radon_max_idx; % index where in the radon-subframe the maximum was located
-        radon_y; % position coordinate in the radon image (may be a transposedd input image...)
-        radon_dy; % slope coordinate in the radon image (may be a transposedd input image...)
+        radon_max_idx; % index where in the Radon-subframe the maximum was located
+        radon_y; % position coordinate in the Radon image (may be a transposed input image...)
+        radon_dy; % slope coordinate in the Radon image (may be a transposed input image...)
         radon_y_var; % variance of the position
         radon_dy_var; % variance of the slope        
         radon_ydy_cov; % cross correlation of the slope-position errors
@@ -184,7 +184,7 @@ classdef Streak < handle
             
             prop_list = properties(obj); 
             
-            for ii = 1:length(prop_list)
+            for ii = 1:length(prop_list) % load all properties that exist in "obj" and also in "finder"
                 name = prop_list{ii};
                 if isprop(finder, name)
                     obj.(name) = finder.(name); % includes: radon_image, psf, frame_num, batch_num, filename, threshold, noise_var, psf_sigma, debug_bit

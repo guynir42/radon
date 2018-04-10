@@ -1,4 +1,4 @@
-In rolumn-major order (e.g. MATLAB and FORTRAN):
+In column-major order (e.g. MATLAB and FORTRAN):
 -Integration is done from left to right, adding whole columns. 
 -axis 1 (first index) is the y axis in the input and Radon image (passive axis). 
 -axis 2 (second index) is x in the input, dy in the Radon image (active axis). 
