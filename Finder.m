@@ -689,16 +689,18 @@ classdef Finder < handle
                         obj.streaks(jj).radon_image = [];
                     end
                 end
+                
+                new_snr = max([util.stat.max2(obj.radon_image), util.stat.max2(obj.radon_image_trans)]); % take the best point of the final image
 
                 if obj.debug_bit
-                    fprintf(' | length= %d | bestSNR= %f\n', obj.bestLength, obj.bestSNR);
+                    fprintf(' | length= %d | bestSNR= %f\n', obj.bestLength, max(new_snr, obj.bestSNR));
                 end
                 
+
                 % keep track of the maximal values found in all the images
                 if ~isempty(obj.streaks) 
                     obj.snr_values = [obj.snr_values obj.bestSNR]; 
                 else
-                    new_snr = max([util.stat.max2(obj.radon_image), util.stat.max2(obj.radon_image_trans)]); % take the best point of the final image
                     obj.snr_values = [obj.snr_values new_snr];
                 end
                 
@@ -988,7 +990,7 @@ classdef Finder < handle
 
             if obj.debug_bit, disp('reducing memory by clearing final images...'); end
 
-            obj.input_image = [];
+            obj.input_images = [];
             obj.radon_image = [];
             obj.radon_image_trans = [];
             obj.radon_var_uni = {};
