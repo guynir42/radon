@@ -74,6 +74,7 @@ classdef Finder < handle
         radon_image_trans; % final transposed FRT
         
         % additional information/statistics:
+        last_snr;
         snr_values; % a list of all SNR values found in this run (use "reset" to clear them)
         latest_thresh; % used in "purgeStreaks"
         
@@ -99,24 +100,24 @@ classdef Finder < handle
     properties % switches/controls
         
         % image preprocessing
-        use_subtract_mean = 0; % verify the mean of each image is zero
+        use_subtract_mean = 1; % verify the mean of each image is zero
         use_conv = 1; % use match filter on data (using the given PSF)        
         use_crop_image = 0; % crop image to fit powers of 2 (does not enlarge)
         crop_size = 2048; % what image size to crop to
         
         % search options
-        use_short = 0; % search for short streaks
+        use_short = 1; % search for short streaks
         min_length = 32; % for finding short streaks (streak can be 1/cos(th) or 1/sin(th) larger)
         threshold = 10; % in units of S/N
         use_autothresh = 0; % find the threshold by comparing to SNR distribution
         use_recursive = 0; % search for multiple streaks (recursive search: remove line and do another FRT)
         recursion_depth = 10; % how many transforms are we willing to do to catch distinct lines (this is for each transposition)
-        use_only_one = 0; % if you happen to get two streaks, one for transposed and one for untransposed, choose only the best one. Ignored when using recursion to find multiple streaks. 
+        use_only_one = 1; % if you happen to get two streaks, one for transposed and one for untransposed, choose only the best one. Ignored when using recursion to find multiple streaks. 
         subtract_psf_widths = 3; % the width to subtract around the found position (when subtracting streaks). Units of PSF sigma
         autothresh_num_sigma = 5; % when doing sigma clipping and fitting the extreme-value distribution, how many "sigmas" above mean do you want to cut (used in "purgeStreaks")
         
         % post-Radon processing (i.e. exclusions)
-        use_exclude = 0; % if you want to remove the row/column noise
+        use_exclude = 1; % if you want to remove the row/column noise
         exclude_dx = [-1 1]*50; % how much to exclude from the transposed radon image
         exclude_dy = []; % how much to exclude from the non-transposed radon image
         
@@ -149,8 +150,8 @@ classdef Finder < handle
         
         im_size_tr; % image size or transposed image size (depending on the last thing input to the FRT)
         
-        default_psf_width = 2; % when no PSF is given, assume this is the width parameter "sigma"
-        default_var_value = 1; % when no variance is given, assume uniform variance map with value 1
+        psf_sigma_default = 2; % when no PSF is given, assume this is the width parameter "sigma"
+        noise_var_default = 1; % when no variance is given, assume uniform variance map with value 1
         
         % these are filled at construction:
         default_min_length; 
@@ -255,7 +256,7 @@ classdef Finder < handle
             obj.im_size_tr = [];
             obj.radon_image = [];
             obj.radon_image_trans = [];
-            
+            obj.last_snr = [];
             obj.streaks = radon.Streak.empty;
             
             % we do not call timing_data.clear, because the variance map is sometimes only calculated per run (not per batch)
@@ -282,7 +283,7 @@ classdef Finder < handle
             if isempty(obj.noise_var)
             
                 if isempty(obj.input_var)
-                    obj.noise_var = obj.default_var_value;
+                    obj.noise_var = obj.noise_var_default;
                 elseif isscalar(obj.input_var)                
                     obj.noise_var = obj.input_var;
                 else
@@ -295,12 +296,12 @@ classdef Finder < handle
                         
         end
         
-        function var = get.psf_sigma(obj) % always returns a scalar PSF width
+        function val = get.psf_sigma(obj) % always returns a scalar PSF width
             
             if isempty(obj.psf_sigma)
 
                 if isempty(obj.input_psf)
-                    obj.psf_sigma = obj.default_psf_width;
+                    obj.psf_sigma = obj.psf_sigma_default; 
                 elseif isscalar(obj.input_psf)                
                     obj.psf_sigma = obj.input_psf;
                 else
@@ -311,7 +312,7 @@ classdef Finder < handle
 
             end
             
-            var = obj.psf_sigma;
+            val = obj.psf_sigma;
             
         end
         
@@ -383,7 +384,7 @@ classdef Finder < handle
                 obj.timing_data.start('make var');
 
                 obj.radon_var_map{1} = radon.frt(obj.input_var, 'partial', 1, 'expand', obj.use_expand);
-                obj.radon_var_map{1} = radon.frt(obj.input_var, 'partial', 1, 'expand', obj.use_expand, 'transpose', 1);
+                obj.radon_var_map{2} = radon.frt(obj.input_var, 'partial', 1, 'expand', obj.use_expand, 'transpose', 1);
                 
                 obj.var_was_expanded = obj.use_expand; % keep track of whether the radon-var-map was expanded
                 
@@ -399,11 +400,23 @@ classdef Finder < handle
     
     methods % setters
         
+        function cycleDisplayWhich(obj)
+                        
+            import util.text.cs;
+            
+            if cs(obj.display_which, 'current')
+                obj.display_which = 'prev';
+            else
+                obj.display_which = 'current';
+            end
+            
+        end
+        
         function set.input_images(obj, val) % also set the im_size parameter
             
             obj.input_images = val;
             
-            obj.im_size = util.vec.imsize(val);
+%             obj.im_size = util.vec.imsize(val);
             
         end
         
@@ -578,6 +591,7 @@ classdef Finder < handle
             import util.img.crop2size;
             import util.vec.pick_index;
             import util.stat.sum2;
+            import util.stat.mean2;
             
             input = util.text.InputVars; % parses varargin-pairs
             input.input_var('images', []);
@@ -600,11 +614,13 @@ classdef Finder < handle
                 obj.input_images = input.images;
             end
             
+            obj.im_size = util.vec.imsize(obj.input_images);
+            
             if ~isempty(input.variance) % if no variance is given, continue with what you have (or default value)
                 if obj.use_crop_image
                     obj.input_var = crop2size(input.variance, obj.crop_size);    
                 else
-                    obj.input_var = obj.variance;
+                    obj.input_var = input.variance;
                 end
             end
                 
@@ -626,6 +642,7 @@ classdef Finder < handle
             for ii = 1:size(obj.input_images,3) % loop on all images in the batch
                 
                 obj.frame_num = ii;
+                obj.last_snr = [];
                 
                 if obj.debug_bit
                     fprintf('running streak detection on batch= % 2d | frame= % 3d... ', obj.batch_num, obj.frame_num);
@@ -634,13 +651,13 @@ classdef Finder < handle
                 obj.timing_data.start('subtraction');
 
                 I = obj.input_images(:,:,ii);
-
+                
                 if obj.use_subtract_mean
                     I = I - mean2(I);
                 end
 
                 I(isnan(I)) = 0; % If you cut the stars out, replace them with NaNs, then subtract mean (see above) then replace NaNs with zeros.
-
+                
                 obj.timing_data.finish('subtraction');
                 
                 obj.timing_data.start('convolution');
@@ -652,11 +669,18 @@ classdef Finder < handle
                 obj.timing_data.finish('convolution');
                 
                 obj.timing_data.start('frt');
-
+                
+                obj.streaks = radon.Streak.empty;
+                obj.last_streak = radon.Streak.empty;
                 R = radon.frt(I, 'finder', obj, 'expand', obj.use_expand);
                 temp_streaks = obj.streaks; % keep this here while filling the list with the transposed image
                 obj.streaks = radon.Streak.empty;
-                RT = radon.frt(obj.subtracted_image, 'finder', obj, 'expand', obj.use_expand, 'trans', 1);
+                obj.last_streak = radon.Streak.empty;
+                if obj.use_only_one==0 || obj.use_recursive
+                    RT = radon.frt(obj.subtracted_image, 'finder', obj, 'expand', obj.use_expand, 'trans', 1);
+                else
+                    RT = radon.frt(I, 'finder', obj, 'expand', obj.use_expand, 'trans', 1);
+                end
                 
                 obj.streaks = [temp_streaks obj.streaks]; % combine the two lists
                 
@@ -690,19 +714,13 @@ classdef Finder < handle
                     end
                 end
                 
-                new_snr = max([util.stat.max2(obj.radon_image), util.stat.max2(obj.radon_image_trans)]); % take the best point of the final image
-
+                new_snr = max(obj.last_snr, obj.bestSNR);
+                
                 if obj.debug_bit
-                    fprintf(' | length= %d | bestSNR= %f\n', obj.bestLength, max(new_snr, obj.bestSNR));
+                    fprintf(' | length= %d | bestSNR= %f\n', obj.bestLength, new_snr);
                 end
                 
-
-                % keep track of the maximal values found in all the images
-                if ~isempty(obj.streaks) 
-                    obj.snr_values = [obj.snr_values obj.bestSNR]; 
-                else
-                    obj.snr_values = [obj.snr_values new_snr];
-                end
+                obj.snr_values = [obj.snr_values new_snr];
                 
                 obj.timing_data.start('show');
                 
@@ -713,8 +731,8 @@ classdef Finder < handle
                 obj.timing_data.finish('show');
                 
                 if ~isempty(obj.streaks)
-                    if obj.debug_bit, disp(['saving streaks with SNR= ' util.text.print_vec([obj.streaks.snr])]); end
-                    obj.prev_streaks = [obj.prev_streaks obj.streaks];
+                    if obj.debug_bit, disp(['saving streaks with SNR= ' util.text.print_vec(new_snr)]); end
+                    obj.prev_streaks = [obj.prev_streaks obj.streaks];                    
                 end
                 
                 drawnow;
@@ -760,8 +778,8 @@ classdef Finder < handle
             if obj.use_exclude % get rid of vertical/horizontal lines
                 
                 if transpose && ~isempty(obj.exclude_dx)
-                    offset = (size(M,3)+1)/2;
-                    scale = obj.im_size_tr(2)/offset;
+                    offset = (size(M,3)+1)/2; % index of dy=0, also how many pixels are for angles 0<=th<=45 in this subframe
+                    scale = obj.im_size_tr(2)/offset; % scaling factor for smaller subframes
                     idx1 = offset + ceil(obj.exclude_dx(1)/scale);
                     idx2 = offset + floor(obj.exclude_dx(2)/scale);
                     SNR_final(:, :, idx1:idx2) = 0;
@@ -776,6 +794,10 @@ classdef Finder < handle
             end
             
             [mx, idx] = maxnd(SNR_final);
+            
+            if isempty(obj.last_snr) || mx>obj.last_snr
+                obj.last_snr = mx;
+            end
             
             if mx>obj.threshold && (isempty(obj.last_streak) || mx>obj.last_streak.snr) % if a shorter streak is already saved, only update it if the new streak has higher SNR
             
@@ -851,7 +873,7 @@ classdef Finder < handle
         
         function show(obj, varargin) % displays the input/Radon image and some streak parameters (usually for the GUI)
             
-            import util.text.*;
+            import util.text.cs;
             
             % parse varargin pairs:
             
@@ -879,6 +901,32 @@ classdef Finder < handle
             
             if ~isempty(obj.gui)
                 obj.gui.update;
+            end
+            
+        end
+        
+        function showAllStreaks(obj, varargin)
+
+            import util.text.cs;
+
+            if cs(obj.display_which, 'current')
+                N = length(obj.streaks);
+            elseif cs(obj.display_which, 'previous')
+                N = length(obj.prev_streaks);
+            else
+                error(['Unknown display_which option "' obj.display_which '", use current/previous...']);
+            end
+            
+            if N==0
+                return;
+            end
+            
+            obj.display_index = 1;
+            
+            for ii = 1:N
+                obj.show(varargin{:});
+                pause(1);
+                obj.nextDisplayIndex;
             end
             
         end
@@ -1002,13 +1050,15 @@ classdef Finder < handle
             end
 
             for ii = 1:length(obj.prev_streaks)
-                obj.prev_streaks(ii).final_image = [];
+                obj.prev_streaks(ii).radon_image = [];
                 obj.prev_streaks(ii).subframe = [];
             end
             
         end
         
         function recalculateFinalImages(obj) % rebuild all that was erased by "clearMemory"
+            
+            import util.stat.sum2;
             
             V = permute(obj.getRadonVariance(0), [1,3,2]);
             VT = permute(obj.getRadonVariance(1), [1,3,2]);
@@ -1019,7 +1069,7 @@ classdef Finder < handle
                 
                 s = s_vec(ii);
                 
-                I = s.original_image;
+                I = s.input_image;
                 
                 I(isnan(I)) = 0;
                 
@@ -1027,15 +1077,17 @@ classdef Finder < handle
                     I = filter2(s.psf, I);
                 end
                 
-                [R, R_partial] = radon.frt(I, 'expand', s.was_expanded, 'transpose', s.transpose, 'partial', 1);
+                R_partial = radon.frt(I, 'expand', s.was_expanded, 'transpose', s.transposed, 'partial', 1);
                 
-                if s.use_transpose
-                    s.final_image = R./sqrt(VT);                    
+                R = radon.partial2final(R_partial{end});
+                
+                if s.transposed
+                    s.radon_image = R./sqrt(VT.*sum2(s.psf).*sqrt(sum2(s.psf.^2)));
                 else
-                    s.final_image = R./sqrt(V);
+                    s.radon_image = R./sqrt(V.*sum2(s.psf).*sqrt(sum2(s.psf.^2)));
                 end
                 
-                s.subframe = R_partial{s.radon_step}./sqrt(obj.getRadonVariance(s.transpose, s.radon_step));
+                s.subframe = R_partial{s.radon_step}./sqrt(obj.getRadonVariance(s.transposed, s.radon_step));
                 
             end
             

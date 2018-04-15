@@ -41,7 +41,7 @@ function [xlists_cell, ylists_cell, num_pixels] = listPixels(x1,x2,y1,y2, im_siz
 
         a = (pix_y2-pix_y1)./(pix_x2-pix_x1);
         
-        if isnan(a) || abs(a)>=1
+        if isnan(a) || abs(a)>=1 % vertical (or closer to vertical) lines
             
             if pix_y1<pix_y2
                 y = pix_y1:pix_y2; % not rounded!

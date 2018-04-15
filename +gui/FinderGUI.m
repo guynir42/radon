@@ -54,6 +54,7 @@ classdef FinderGUI < handle
         input_rect_size;
         button_use_monochrome;
         button_display_which;
+        button_play;
         button_prev;
         input_streak_num;
         button_next;
@@ -164,6 +165,7 @@ classdef FinderGUI < handle
             obj.button_use_monochrome = GraphicButton(obj.panel_display, [0.4 0.5 0.2 0.5], obj.owner, 'display_monochrome', 'toggle', 'color', 'monochrome');
             
             obj.button_display_which = GraphicButton(obj.panel_display, [0.6 0.5 0.2 0.5], obj.owner, 'cycleDisplayWhich', 'push');
+            obj.button_play = GraphicButton(obj.panel_display, [0.4 0 0.2 0.5], obj.owner, 'showAllStreaks', 'push', 'play');
             obj.button_prev = GraphicButton(obj.panel_display, [0.6 0 0.05 0.5], obj.owner, 'prevDisplayIndex', 'push', '-');
             obj.input_streak_num = GraphicButton(obj.panel_display, [0.65 0 0.05 0.5], obj.owner, 'display_index', 'input', ' ');
             obj.button_next = GraphicButton(obj.panel_display, [0.70 0 0.05 0.5], obj.owner, 'nextDisplayIndex', 'push', '+');

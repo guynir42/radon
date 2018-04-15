@@ -198,6 +198,7 @@ classdef Simulator < handle
             obj.image_line = [];
             obj.image_conv = [];
             obj.image_final = [];
+            obj.psf = [];
             obj.num_pixels = 0;
             
         end
@@ -676,10 +677,11 @@ classdef Simulator < handle
         
         function update_finder(obj) % give the Finder object the real variance and PSF 
             
-            if obj.finder.noise_var~=obj.bg_noise_var
-                obj.finder.makeVarMap(obj.bg_noise_var);
-            end
+%             if obj.finder.noise_var~=obj.bg_noise_var
+%                 obj.finder.makeVarMap(obj.bg_noise_var);
+%             end
             
+            obj.finder.input_var = obj.bg_noise_var;
             obj.finder.input_psf = obj.psf;
                         
         end

@@ -33,8 +33,9 @@ classdef Streak < handle
         is_short = 0; % if yes, the subframe size is smaller than the full radon size
         
         % how bright the treak was
-        I; % intensity (brightness per pixel)
+        I; % intensity (brightness per unit length)
         snr; % signal to noise ratio for this detection
+        snr_fwhm;
         count; % number of photons in the whole frame
         
         % streak coordinates
@@ -126,7 +127,7 @@ classdef Streak < handle
                     obj.count = count;
                     obj.radon_max_idx = index;
                     obj.snr = subframe(index(1), index(2), index(3));
-
+                    
                     try
                         obj.update_from_finder(finder); % get all the generic details straight from the finder object
                         obj.calculate; % go from raw Radon coordinates to streak parameters
@@ -212,7 +213,6 @@ classdef Streak < handle
             
             obj.radon_x1 = (2.^obj.radon_step)*(obj.radon_max_idx(2)-1)+1;
             obj.radon_x2 = (2.^obj.radon_step)*(obj.radon_max_idx(2));
-%             offset = floor((obj.subframe_size(1)-obj.subframe_size(2))/2);
             obj.radon_y = obj.radon_max_idx(1);
             obj.radon_dy = obj.radon_max_idx(3) - ceil(size(obj.subframe,3)/2);
             
@@ -226,6 +226,7 @@ classdef Streak < handle
             obj.th = atand(obj.a); % this theta is inverted when transposed==1
             obj.L = obj.radon_dx./cosd(obj.th);            
             obj.I = obj.snr*sqrt(2.*sqrt(pi).*obj.psf_sigma.*obj.noise_var./(obj.L.*cosd(obj.th)));
+            obj.snr_fwhm = obj.I*0.81./sqrt(obj.noise_var);
             obj.y1 = obj.a*obj.x1 + obj.b;
             obj.y2 = obj.a*obj.x2 + obj.b;
             
@@ -281,43 +282,37 @@ classdef Streak < handle
             
         end
         
-        function I_sub = subtractStreak(obj, I_in, width) % subtract this streak (+error ellipse) from image
+        function M_sub = subtractStreak(obj, M_in, width) % subtract this streak (+error ellipse) from image
             
             if nargin<3 || isempty(width)
                 width = obj.subtract_psf_widths;
             end
             
             % these are really rough estimates. Can improve this by looking at the error ellipse and subtracting y and dy values inside that range only 
-            y = -obj.psf_sigma*width:obj.psf_sigma*width;
-            dy = -obj.psf_sigma*width:obj.psf_sigma*width;
+            shift = -obj.psf_sigma*width:obj.psf_sigma*width;
+%             dy = -obj.psf_sigma*width:obj.psf_sigma*width;
             
-            I_sub = I_in;
-                        
-            offset = floor((obj.subframe_size(1)-obj.im_size(1))/2); % this difference is from using expandMatrix
+            M_sub = M_in;
+            
+            for ii = 1:length(shift)
 
-            for ii = 1:length(y)
-                
-                for jj = 1:length(dy)
-                    
-                    if obj.transposed
-                        x1 = obj.radon_y+y(ii) - offset;
-                        x2 = obj.radon_y+obj.radon_dy+y(ii) - offset;
-                        y1 = obj.radon_x1-dy(jj);
-                        y2 = obj.radon_x2+dy(jj);
-                    else
-                        y1 = obj.radon_y+y(ii) - offset;
-                        y2 = obj.radon_y+obj.radon_dy+y(ii) - offset;
-                        x1 = obj.radon_x1-dy(jj);
-                        x2 = obj.radon_x2+dy(jj);
-                    end
-                    
-                    [xlist, ylist] = radon.listPixels(x1,x2,y1,y2,size(I_in));
-                    
-                    idx = sub2ind(size(I_in), ylist{1}, xlist{1});
-                    I_sub(idx) = 0;
-                    
+                if obj.transposed
+                    x1 = obj.x1 + shift(ii);
+                    x2 = obj.x2 + shift(ii);
+                    y1 = obj.y1;
+                    y2 = obj.y2;
+                else
+                    x1 = obj.x1;
+                    x2 = obj.x2;
+                    y1 = obj.y1 + shift(ii);
+                    y2 = obj.y2 + shift(ii);
                 end
                 
+                [xlist, ylist] = radon.listPixels(x1,x2,y1,y2,size(M_in));
+
+                idx = sub2ind(size(M_in), ylist{1}, xlist{1});
+                M_sub(idx) = 0;
+
             end
             
         end
@@ -589,7 +584,7 @@ classdef Streak < handle
             end
 
             if ~isempty(line_offset)
-                obj.drawGuidelines(ax, size(input_image), line_offset, line_color, use_publishable, font_size);
+                obj.drawGuidelines(ax, size(input_image), line_offset, line_color);
             end
            
             drawnow;
@@ -759,8 +754,16 @@ classdef Streak < handle
 
             if rect_size
 
-                x_val = obj.radon_dy - rect_size/2;
-                y_val = obj.radon_y - rect_size/2;
+%                 x_val = obj.radon_dy - rect_size/2;
+%                 y_val = obj.radon_y - rect_size/2;
+
+                if obj.transposed
+                    y_val = obj.x0 - rect_size/2;
+                    x_val = obj.im_size(1)./obj.a - rect_size/2;
+                else
+                    y_val = obj.b - rect_size/2;
+                    x_val = obj.im_size(2).*obj.a - rect_size/2;
+                end
 
                 rectangle(ax, 'Position', [x_val y_val rect_size rect_size], 'EdgeColor', line_color);
                 rectangle(ax, 'Position', [x_val-1 y_val-1 rect_size+2 rect_size+2]);
@@ -776,7 +779,8 @@ classdef Streak < handle
     methods % utilities
         
         function saveas(obj_vec, filename, varname) % just save a streak (or vector of streaks) into a MAT file
-                       
+                    
+            ext  = '';
             if nargin<3 || isempty(varname)
                 [~, varname, ext] = fileparts(filename);
             end

@@ -87,12 +87,7 @@ function [R, finder] = frt(M_in, varargin)
     if ~isempty(finder) % if we have a finder, we MUST get a variance cell array with partial variances
 
         finder.im_size_tr = size(M); % the size of the transposed or un-transposed image
-
-        if ~transpose
-            finder.im_size = size(M); % size of original image
-        else
-            finder.im_size = [size(M,2), size(M,1)]; % size of original image
-        end
+        finder.im_size = size(M_in);
 
     end
 
@@ -111,8 +106,6 @@ function [R, finder] = frt(M_in, varargin)
     R_partial = {};
     dy = 0; % the different shifts for the current M
 
-    M = M;
-    
     for m = 1:log2(size(M,2))
 
 %         disp(['m= ' num2str(m)]);
