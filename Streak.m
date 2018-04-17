@@ -224,8 +224,9 @@ classdef Streak < handle
             obj.b = obj.radon_y - offset - obj.radon_x1*obj.a;
             obj.x0 = -obj.b./obj.a;
             obj.th = atand(obj.a); % this theta is inverted when transposed==1
-            obj.L = obj.radon_dx./cosd(obj.th);            
-            obj.I = obj.snr*sqrt(2.*sqrt(pi).*obj.psf_sigma.*obj.noise_var./(obj.L.*cosd(obj.th)));
+            obj.L = obj.radon_dx./cosd(obj.th);
+            f = abs(cosd(obj.th));
+            obj.I = obj.snr*sqrt(2.*sqrt(pi).*obj.psf_sigma.*obj.noise_var./(obj.L.*f));
             obj.snr_fwhm = obj.I*0.81./sqrt(obj.noise_var);
             obj.y1 = obj.a*obj.x1 + obj.b;
             obj.y2 = obj.a*obj.x2 + obj.b;
@@ -365,7 +366,7 @@ classdef Streak < handle
                 width = obj.L.*2;
             end
                         
-            xywh = obj.getBoxBoundaries(width, height);
+            xywh = obj.getBoxBoundaries(width, width);
             
             x1 = xywh(1);
             x2 = x1+xywh(3)-1;            
@@ -374,10 +375,10 @@ classdef Streak < handle
             
             if x1<1, x1 = 1; end
             if y1<1, y1 = 1; end            
-            if x2>size(obj.input_image,2); end            
-            if y2>size(obj.input_image,1); end
+            if x2>size(obj.input_image,2), x2 = size(obj.input_image,2); end            
+            if y2>size(obj.input_image,1), y2 = size(obj.input_image,1); end
             
-            I = obj.input_image(y1:y2, x1:x2);
+            I = util.img.pad2size(obj.input_image(y1:y2, x1:x2), width);
             
         end
         

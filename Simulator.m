@@ -818,7 +818,7 @@ classdef Simulator < handle
                     margin = val;
                 elseif cs(key, {'axes', 'axis'})
                     ax = val;
-                elseif cs(ket, 'font_size')
+                elseif cs(key, 'font_size')
                     font_size = val;
                 end
                 
@@ -858,7 +858,7 @@ classdef Simulator < handle
             if obj.use_finder && ~isempty(obj.finder) && ~isempty(obj.finder.streaks)
                 
                 for ii = 1:length(obj.finder.streaks)
-                    obj.finder.streaks(ii).drawGuidelines(ax, obj.im_size, 15, 'Red');
+                    obj.finder.streaks(ii).drawGuidelines(ax, obj.im_size, 15, 'White');
                 end
                 
                 obj.finder.streaks(1).drawStats(ax, font_size);
