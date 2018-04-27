@@ -211,6 +211,7 @@ classdef Streak < handle
                 obj.noise_var = noise_var;
             end
             
+            obj.is_short = ndims(obj.subframe)>2 && size(obj.subframe,2)>1;
             obj.radon_x1 = (2.^obj.radon_step)*(obj.radon_max_idx(2)-1)+1;
             obj.radon_x2 = (2.^obj.radon_step)*(obj.radon_max_idx(2));
             obj.radon_y = obj.radon_max_idx(1);
@@ -444,15 +445,15 @@ classdef Streak < handle
             
             if ~isempty(input_image) 
                 
-                obj.showOriginal(varargin{:}, 'axes', ax1);
+                obj.showOriginal(varargin{:}, 'axes', ax1, 'FontSize', font_size);
                 
                 if use_publishable
-                    inner_title(ax1, '(a)', 'Position', 'corner', 'FontSize', font_size);
+                    inner_title(ax1, '(a)', 'Position', 'corner');
                 end
                 
             end
             
-            ax2 = axes('Parent', parent, 'Position', [0.55 0.1 0.4 0.8]);
+            ax2 = axes('Parent', parent, 'Position', [0.5 0.1 0.4 0.8]);
             
             if ~isempty(radon_image)
                 
@@ -517,6 +518,8 @@ classdef Streak < handle
                         given_x0 = streak.x0;
                         given_snr = streak.getSNR;
                     end
+                elseif cs(key, 'font_size')
+                    font_size = val;
                 elseif cs(key, 'line_offset')
                     line_offset = val;
                 elseif cs(key, {'rectangle_size', 'rect_size'})
@@ -573,11 +576,6 @@ classdef Streak < handle
                     title(ax, ['original image (' f2s(given_I) 'e/pix)'], 'FontSize', font_size);
                 end                    
 
-%                     inner_title(ax1, ['var= ' f2s(var2(input_image))], 'Position', 'left', 'FontSize', font_size, 'Color', line_color);
-%                     inner_title(ax1, ['batch= ' num2str(obj.batch_num) ' | frame= ' num2str(obj.frame_num)], 'Position', 'Bottom', 'FontSize', font_size, 'Color', line_color);
-%                     inner_title(ax1, ['x0= ' num2str(obj.x0) ' | \theta= ' sprintf('%3.0f', obj.th) '^o'], 'Position', 'Right', 'FontSize', font_size, 'Color', line_color);
-
-%                 xlabel(ax, sprintf('b= %d | f= %d | x0= %d | \\theta= %3.0f^o | I= %3.1f', obj.batch_num, obj.frame_num, obj.x0, obj.th, obj.I));
                 if ~use_publishable
                     obj.drawStats(ax, font_size);
                 end
@@ -585,9 +583,11 @@ classdef Streak < handle
             end
 
             if ~isempty(line_offset)
-                obj.drawGuidelines(ax, size(input_image), line_offset, line_color);
+                obj.drawGuidelines(ax, size(input_image), line_offset, line_color, use_publishable);
             end
-           
+            
+            ax.FontSize = font_size;
+            
             drawnow;
             
         end
@@ -612,24 +612,25 @@ classdef Streak < handle
             
         end
         
-        function drawGuidelines(obj, ax, im_size, line_offset, line_color) % draw two dashed lines around the location of the streak in the original image
+        function drawGuidelines(obj, ax, im_size, line_offset, line_color, use_publishable) % draw two dashed lines around the location of the streak in the original image
                         
                 if line_offset==1
                     line_offset = 0.02*im_size(1);
                 end
 
-                line(ax, [obj.x1 obj.x2]-line_offset, [obj.y1 obj.y2], 'Color', line_color, 'LineStyle','--', 'LineWidth', 2);
-                line(ax, [obj.x1 obj.x2]+line_offset, [obj.y1 obj.y2], 'Color', line_color, 'LineStyle','--', 'LineWidth', 2);
-
-                % the legend for the lines
-                if obj.th<90
-                    x0 = obj.im_size(2)*0.5;
-                    x1 = x0 + obj.im_size(2)*0.1;
-                    y1 = obj.im_size(1)*0.1;
+                if use_publishable
+                    
+                    N =3;
+                    
+                    line(ax, [obj.x1 obj.x1+line_offset*N*cosd(obj.th)]-line_offset, [obj.y1 obj.y1+line_offset*N*sind(obj.th)], 'Color', 'white', 'LineStyle','-', 'LineWidth', 2);
+                    line(ax, [obj.x2-line_offset*N*cosd(obj.th) obj.x2]-line_offset, [obj.y2-line_offset*N*sind(obj.th) obj.y2], 'Color', 'white', 'LineStyle','-', 'LineWidth', 2);
+                    
+                    line(ax, [obj.x1 obj.x1+line_offset*N*cosd(obj.th)]+line_offset, [obj.y1 obj.y1+line_offset*N*sind(obj.th)], 'Color', 'white', 'LineStyle','-', 'LineWidth', 2);
+                    line(ax, [obj.x2-line_offset*N*cosd(obj.th) obj.x2]+line_offset, [obj.y2-line_offset*N*sind(obj.th) obj.y2], 'Color', 'white', 'LineStyle','-', 'LineWidth', 2);
+                    
                 else
-                    x0 = obj.im_size(2)*0.1;
-                    x1 = x0 + obj.im_size(2)*0.1;
-                    y1 = obj.im_size(1)*0.1;
+                    line(ax, [obj.x1 obj.x2]-line_offset, [obj.y1 obj.y2], 'Color', line_color, 'LineStyle','--', 'LineWidth', 2);
+                    line(ax, [obj.x1 obj.x2]+line_offset, [obj.y1 obj.y2], 'Color', line_color, 'LineStyle','--', 'LineWidth', 2);
                 end
 
         end
@@ -682,6 +683,8 @@ classdef Streak < handle
                         given_x0 = streak.x0;
                         given_snr = streak.getSNR;
                     end
+                elseif cs(key, 'font_size')
+                    font_size = val;
                 elseif cs(key, {'rectangle_size', 'rect_size'})
                     rect_size = val;
                 elseif cs(key, 'radon_image')
@@ -697,7 +700,7 @@ classdef Streak < handle
             end
             
             if isempty(expand)
-                expand = 1;
+                expand = 0;
             end
             
             if isempty(font_size)
@@ -770,7 +773,9 @@ classdef Streak < handle
                 rectangle(ax, 'Position', [x_val-1 y_val-1 rect_size+2 rect_size+2]);
 
             end
-           
+            
+            ax.FontSize = font_size;
+            
             drawnow;
             
         end

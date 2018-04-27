@@ -803,11 +803,13 @@ classdef Simulator < handle
         
         function show(obj, varargin) % display the image with streak(s) on it, and some statistics
             
-            import util.text.*;
+            import util.text.cs;
+            import util.text.parse_bool;
             
             margin = []; % add margin to be able to draw lines outside the frame
             ax = []; % by default us the GUI axes if it exists, otherwise gca
             font_size = 24;
+            use_publishable = 0;
             
             for ii = 1:2:length(varargin)
                
@@ -820,6 +822,8 @@ classdef Simulator < handle
                     ax = val;
                 elseif cs(key, 'font_size')
                     font_size = val;
+                elseif cs(key, 'publishable', 'use_publishable')
+                    use_publishable = parse_bool(val);
                 end
                 
             end
@@ -858,7 +862,7 @@ classdef Simulator < handle
             if obj.use_finder && ~isempty(obj.finder) && ~isempty(obj.finder.streaks)
                 
                 for ii = 1:length(obj.finder.streaks)
-                    obj.finder.streaks(ii).drawGuidelines(ax, obj.im_size, 15, 'White');
+                    obj.finder.streaks(ii).drawGuidelines(ax, obj.im_size, 15, 'White', use_publishable);
                 end
                 
                 obj.finder.streaks(1).drawStats(ax, font_size);

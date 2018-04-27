@@ -676,6 +676,7 @@ classdef Finder < handle
                 temp_streaks = obj.streaks; % keep this here while filling the list with the transposed image
                 obj.streaks = radon.Streak.empty;
                 obj.last_streak = radon.Streak.empty;
+                
                 if obj.use_only_one==0 || obj.use_recursive
                     RT = radon.frt(obj.subtracted_image, 'finder', obj, 'expand', obj.use_expand, 'trans', 1);
                 else
@@ -809,7 +810,7 @@ classdef Finder < handle
                       
         end
         
-        function finalizeFRT(obj, M_in, transpose) % call this at the end of the FRT function, if there is a finder
+        function finalizeFRT(obj, M_in, transpose, radon_image) % call this at the end of the FRT function, if there is a finder
             
             obj.subtracted_image = M_in; % must have something in this image
             
@@ -818,7 +819,9 @@ classdef Finder < handle
             end
 
             if ~isempty(obj.last_streak) % if we found a streak
-
+                
+                obj.last_streak.input_image = M_in;
+                obj.radon_image = radon_image;
                 obj.streaks(end+1) = obj.last_streak;
                 obj.subtracted_image = obj.streaks(end).subtractStreak(M_in, obj.subtract_psf_widths); % if any streaks are found, subtract them first... 
                 

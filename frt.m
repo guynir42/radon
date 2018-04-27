@@ -88,7 +88,7 @@ function [R, finder] = frt(M_in, varargin)
 
         finder.im_size_tr = size(M); % the size of the transposed or un-transposed image
         finder.im_size = size(M_in);
-
+        
     end
 
     if use_padding
@@ -162,17 +162,17 @@ function [R, finder] = frt(M_in, varargin)
 
     end % for m (logarithmic jumps)
 
-    % update the finder with any streaks we have found...
-    if ~isempty(finder) 
-        finder.finalizeFRT(M_in, transpose);
-    end
-    
     if use_partials
         R = R_partial;
     else
         R = permute(M, [1,3,2]); % return just the final Radon transform
     end
-        
+
+    % update the finder with any streaks we have found...
+    if ~isempty(finder) 
+        finder.finalizeFRT(M_in, transpose, permute(M, [1,3,2]));
+    end
+            
 end
 
 function M_out = padMatrix(M_in, pad_value)
