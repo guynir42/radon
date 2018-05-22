@@ -639,6 +639,11 @@ classdef Finder < handle
             V = permute(V, [1,3,2]);
             VT = permute(VT, [1,3,2]);
             
+            th = atand((-obj.im_size(1)+1:obj.im_size(1)-1)./obj.im_size(1)); % angle range, in degrees
+            G = 1./sqrt(max(cosd(th), sind(th))); % geometric factor correction to the S/N
+            thT = atand((-obj.im_size(2)+1:obj.im_size(2)-1)./obj.im_size(2)); % angle range, in degrees
+            GT = 1./sqrt(max(cosd(thT), sind(thT))); % geometric factor correction to the S/N for the transposed image
+            
             for ii = 1:size(obj.input_images,3) % loop on all images in the batch
                 
                 obj.frame_num = ii;
@@ -691,8 +696,8 @@ classdef Finder < handle
                 
                 obj.timing_data.finish('frt');
 
-                obj.radon_image = R./sqrt(V*sqrt(sum2(obj.psf.^2))*sum2(obj.psf)); % this normalization makes sure the result is in units of S/N, regardless of the normalization of the PSF. 
-                obj.radon_image_trans = RT./sqrt(VT*sqrt(sum2(obj.psf.^2))*sum2(obj.psf)); % one makes sure the PSF is unity normalized, the other divides by the amount of noise "under" the PSF
+                obj.radon_image = R./sqrt(V*sqrt(sum2(obj.psf.^2))*sum2(obj.psf)).*G; % this normalization makes sure the result is in units of S/N, regardless of the normalization of the PSF. 
+                obj.radon_image_trans = RT./sqrt(VT*sqrt(sum2(obj.psf.^2))*sum2(obj.psf)).*GT; % one makes sure the PSF is unity normalized, the other divides by the amount of noise "under" the PSF
                 
                 % check if we want to save a copy of the subframe and input/final image in each of the streaks... 
                 if obj.use_save_images
@@ -772,8 +777,13 @@ classdef Finder < handle
             end
             
             V = obj.getRadonVariance(transpose, m);
+%             th = atand((-obj.im_size_tr(1)+1:obj.im_size_tr(1)-1)./obj.im_size_tr(1)); % angle range, in degrees
+            S = (size(M,3)+1)/2;
+            th = atand((-S+1:S-1)./S);
+            G = 1./sqrt(max(cosd(th), sind(th))); % geometric factor correction to the S/N
+            G = util.vec.topages(G);
             
-            SNR = double(M)./sqrt(V*sqrt(sum2(obj.psf.^2))*sum2(obj.psf)); % this should be normalized to SNR units... (see the same normalization in "input")
+            SNR = double(M)./sqrt(V*sqrt(sum2(obj.psf.^2))*sum2(obj.psf)).*G; % this should be normalized to SNR units... (see the same normalization in "input")
             SNR_final = SNR; % copy not to be saved (e.g. exclusions in the middle)
             
             if obj.use_exclude % get rid of vertical/horizontal lines
@@ -823,7 +833,10 @@ classdef Finder < handle
                 obj.last_streak.input_image = M_in;
                 obj.radon_image = radon_image;
                 obj.streaks(end+1) = obj.last_streak;
-                obj.subtracted_image = obj.streaks(end).subtractStreak(M_in, obj.subtract_psf_widths); % if any streaks are found, subtract them first... 
+                
+                if ~obj.use_only_one
+                    obj.subtracted_image = obj.streaks(end).subtractStreak(M_in, obj.subtract_psf_widths); % if any streaks are found, subtract them first... 
+                end
                 
                 if obj.use_recursive && length(obj.streaks)<obj.recursion_depth % keep calling FRT until all streaks are found...
                     

@@ -168,6 +168,9 @@ classdef Simulator < handle
                     obj.finder = other; 
                 else
                     obj.finder = radon.Finder;
+                    obj.finder.use_exclude = 0;
+                    obj.finder.use_only_one = 1;
+                    obj.finder.use_short = 0;
                 end
 
                 if obj.debug_bit, fprintf('Simulator constructor v%4.2f\n', obj.version); end
@@ -613,7 +616,8 @@ classdef Simulator < handle
             
             I = obj.intensity; % already includes geometric factor... 
             
-            val = I.*sqrt(L.*obj.trig_factor./obj.bg_noise_var);
+%             val = I.*sqrt(L.*obj.trig_factor./obj.bg_noise_var);
+            val = I.*sqrt(L./obj.bg_noise_var);
             
             if obj.use_psf
                 val = val./sqrt(2*sqrt(pi)*obj.psf_sigma);

@@ -226,8 +226,8 @@ classdef Streak < handle
             obj.x0 = -obj.b./obj.a;
             obj.th = atand(obj.a); % this theta is inverted when transposed==1
             obj.L = obj.radon_dx./cosd(obj.th);
-            f = abs(cosd(obj.th));
-            obj.I = obj.snr*sqrt(2.*sqrt(pi).*obj.psf_sigma.*obj.noise_var./(obj.L.*f));
+%             f = abs(cosd(obj.th));
+            obj.I = obj.snr*sqrt(2.*sqrt(pi).*obj.psf_sigma.*obj.noise_var./(obj.L));
             obj.snr_fwhm = obj.I*0.81./sqrt(obj.noise_var);
             obj.y1 = obj.a*obj.x1 + obj.b;
             obj.y2 = obj.a*obj.x2 + obj.b;
