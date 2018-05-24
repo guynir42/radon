@@ -482,8 +482,14 @@ classdef Finder < handle
              
         function val = bestSNR(obj) % best SNR for all streaks in this frame...
             
+            import util.stat.max2;
+            
             if isempty(obj.streaks)
-                val = 0;
+                if isempty(obj.radon_image)
+                    val = 0;
+                else
+                    val = max(max2(obj.radon_image), max2(obj.radon_image_trans));
+                end
             else
                 val = max([obj.streaks.snr]);
             end
@@ -640,7 +646,7 @@ classdef Finder < handle
             VT = permute(VT, [1,3,2]);
             
             th = atand((-obj.im_size(1)+1:obj.im_size(1)-1)./obj.im_size(1)); % angle range, in degrees
-            G = max(abs(cosd(th)), abs(sind(th)))); % geometric factor correction to the S/N
+            G = max(abs(cosd(th)), abs(sind(th))); % geometric factor correction to the S/N
             thT = atand((-obj.im_size(2)+1:obj.im_size(2)-1)./obj.im_size(2)); % angle range, in degrees
             GT = max(abs(cosd(thT)), abs(sind(thT))); % geometric factor correction to the S/N for the transposed image
             
@@ -695,9 +701,9 @@ classdef Finder < handle
                 end
                 
                 obj.timing_data.finish('frt');
-
-                obj.radon_image = R./sqrt(V*sqrt(sum2(obj.psf.^2).*G)*sum2(obj.psf)); % this normalization makes sure the result is in units of S/N, regardless of the normalization of the PSF. 
-                obj.radon_image_trans = RT./sqrt(VT*sqrt(sum2(obj.psf.^2).*GT)*sum2(obj.psf)).*GT; % one makes sure the PSF is unity normalized, the other divides by the amount of noise "under" the PSF
+                                        
+                obj.radon_image = R./sqrt(V.*sqrt(sum2(obj.psf.^2).*G).*sum2(obj.psf)); % this normalization makes sure the result is in units of S/N, regardless of the normalization of the PSF. 
+                obj.radon_image_trans = RT./sqrt(VT.*sqrt(sum2(obj.psf.^2).*GT).*sum2(obj.psf)).*GT; % one makes sure the PSF is unity normalized, the other divides by the amount of noise "under" the PSF
                 
                 % check if we want to save a copy of the subframe and input/final image in each of the streaks... 
                 if obj.use_save_images
@@ -826,6 +832,7 @@ classdef Finder < handle
             
             if ~isempty(obj.last_streak) && obj.last_streak.radon_dx < obj.min_length % kill streaks that are too short (e.g. bright point-sources)
                 obj.last_streak = radon.Streak.empty;
+                obj.last_snr = 0;
             end
 
             if ~isempty(obj.last_streak) % if we found a streak
