@@ -448,7 +448,7 @@ classdef Streak < handle
                 obj.showOriginal(varargin{:}, 'axes', ax1, 'FontSize', font_size);
                 
                 if use_publishable
-                    inner_title(ax1, '(a)', 'Position', 'corner');
+                    inner_title(ax1, '(a)', 'Position', 'corner', 'FontSize', font_size);
                 end
                 
             end
@@ -566,7 +566,7 @@ classdef Streak < handle
 
                 title(ax, '');
 
-                inner_title(ax, corner_title, 'Position', 'corner', 'FontSize', font_size, 'FontColor', line_color);
+%                 inner_title(ax, corner_title, 'Position', 'corner', 'FontSize', font_size, 'FontColor', line_color);
 
             else
 
@@ -744,7 +744,7 @@ classdef Streak < handle
             end
         
             if use_publishable
-                inner_title(ax, '(b)', 'Position', 'corner', 'FontSize', font_size);
+%                 inner_title(ax, '(b)', 'Position', 'corner', 'FontSize', font_size);
                 title(ax, '');
             else
 

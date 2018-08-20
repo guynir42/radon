@@ -645,9 +645,11 @@ classdef Finder < handle
             V = permute(V, [1,3,2]);
             VT = permute(VT, [1,3,2]);
             
-            th = atand((-obj.im_size(1)+1:obj.im_size(1)-1)./obj.im_size(1)); % angle range, in degrees
+            N = pow2(nextpow2(obj.im_size(1)));
+            th = atand((-N+1:N-1)./obj.im_size(1)); % angle range, in degrees
             G = max(abs(cosd(th)), abs(sind(th))); % geometric factor correction to the S/N
-            thT = atand((-obj.im_size(2)+1:obj.im_size(2)-1)./obj.im_size(2)); % angle range, in degrees
+            NT = pow2(nextpow2(obj.im_size(2)));
+            thT = atand((-NT+1:NT-1)./obj.im_size(2)); % angle range, in degrees
             GT = max(abs(cosd(thT)), abs(sind(thT))); % geometric factor correction to the S/N for the transposed image
             
             for ii = 1:size(obj.input_images,3) % loop on all images in the batch
