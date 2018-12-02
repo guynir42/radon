@@ -18,28 +18,22 @@ classdef FinderGUI < handle
     
     properties % gui stuff
         
-        panel_options;
-        
+        panel_prep;
+        button_use_prep;
         button_use_sub;
+        button_use_mean;
+        button_use_median;
+        button_use_conv;
+        button_use_crop;
+        input_crop_size;
         
-        button_use_autothresh;
-        button_autothresh_val;
+        panel_search;
         input_thresh;
-        
         button_use_short;
         input_min_length;
-        input_pixel_res;
-        
-        button_use_recursive;
-        input_recursion_depth;
-        
-        panel_exclude;
         button_use_exclude;
         input_exclude_dx;
         input_exclude_dy;
-        
-        button_use_crop;
-        input_crop_size;
         
         button_use_save;
         
@@ -114,35 +108,36 @@ classdef FinderGUI < handle
             obj.fig.name = 'FinderGUI';
             movegui(obj.fig.fig, 'center');
             
-            %%%%%%%%%%% panel options %%%%%%%%%%%%%%%%
+            %%%%%%%%%%% panel prep %%%%%%%%%%%%%%%%
             
-            obj.panel_options = uipanel('Title', 'options', 'Position', [0.0 0.2 0.2 0.8]);
+            obj.panel_prep = uipanel('Title', 'preprocess', 'Position', [0.0 8/12 0.2 4/12]);
             
-            num = 14;
-            
-            obj.button_use_sub = GraphicButton(obj.panel_options, [0 (num-1)/num 1 1/num], obj.owner, 'use_subtract_mean', 'toggle', 'no sub. mean', 'use sub. mean');
-            obj.button_use_autothresh = GraphicButton(obj.panel_options, [0 (num-2)/num 0.8 1/num], obj.owner, 'use_autothresh', 'toggle', 'no autothresh', 'use autothresh');
-            obj.button_autothresh_val = GraphicButton(obj.panel_options, [0.8 (num-2)/num 0.2 1/num], obj.owner, 'latest_thresh', 'info', '');
-            obj.button_autothresh_val.font_size = 'small';
-            obj.input_thresh = GraphicButton(obj.panel_options, [0 (num-3)/num 1 1/num], obj.owner, 'threshold', 'input', 'threshold= ');
-            
-            obj.button_use_short = GraphicButton(obj.panel_options, [0 (num-4)/num 1 1/num], obj.owner, 'use_short', 'toggle', 'no short', 'use short');
-            obj.input_min_length = GraphicButton(obj.panel_options, [0 (num-5)/num 1 1/num], obj.owner, 'min_length', 'input', 'len= ');
-           
-            obj.button_use_recursive = GraphicButton(obj.panel_options, [0 (num-7)/num 1 1/num], obj.owner, 'use_recursive', 'toggle', 'no recursion', 'use recursion');
-            obj.input_recursion_depth = GraphicButton(obj.panel_options, [0 (num-8)/num 1 1/num], obj.owner, 'recursion_depth', 'input', 'depth= ');
+            num = 4;
                         
-            obj.button_use_exclude = GraphicButton(obj.panel_options, [0 (num-9)/num 1 1/num], obj.owner, 'use_exclude', 'toggle', 'no exclude', 'use exclude');
-            obj.input_exclude_dx = GraphicButton(obj.panel_options, [0 (num-10)/num 1 1/num], obj.owner, 'exclude_dx', 'input', 'exc. dx= ');
-            obj.input_exclude_dy = GraphicButton(obj.panel_options, [0 (num-11)/num 1 1/num], obj.owner, 'exclude_dy', 'input', 'exc. dy= ');
+            obj.button_use_prep = GraphicButton(obj.panel_prep, [0 (num-1)/num 1 1/num], obj.owner, 'use_preprocess', 'toggle', 'no prep', 'use prep','','','','red');
+            obj.button_use_mean = GraphicButton(obj.panel_prep, [0 (num-2)/num 0.5 1/num], obj.owner, 'use_subtract_mean', 'toggle', 'sub-mean', 'sub-mean','','','','red');            
+            obj.button_use_median = GraphicButton(obj.panel_prep, [0.5 (num-2)/num 0.5 1/num], obj.owner, 'use_subtract_median', 'toggle', 'sub-median', 'sub-median','','','','red');
+            obj.button_use_crop = GraphicButton(obj.panel_prep, [0 (num-3)/num 1 1/num], obj.owner, 'use_crop', 'toggle', 'no crop', 'use crop','','','','red');
+            obj.input_crop_size = GraphicButton(obj.panel_prep, [0 (num-4)/num 1 1/num], obj.owner, 'crop_size', 'input', 'crop= ');
+            
+            %%%%%%%%%%% panel search %%%%%%%%%%%%%%%%
+            
+            obj.panel_search = uipanel('Title', 'search', 'Position', [0.0 2/12 0.2 6/12]);
                         
-            obj.button_use_crop = GraphicButton(obj.panel_options, [0 (num-12)/num 1 1/num], obj.owner, 'use_crop_image', 'toggle', 'no crop', 'use crop');
-            obj.input_crop_size = GraphicButton(obj.panel_options, [0 (num-13)/num 1 1/num], obj.owner, 'crop_size', 'input', 'crop= ');
-            obj.button_use_save = GraphicButton(obj.panel_options, [0 (num-14)/num 1 1/num], obj.owner, 'use_save_images', 'toggle', 'no save', 'save images');
+            num = 6;
+            
+            obj.input_thresh = GraphicButton(obj.panel_search, [0 (num-1)/num 1 1/num], obj.owner, 'threshold', 'input', 'threshold= ');
+            obj.button_use_short = GraphicButton(obj.panel_search, [0 (num-2)/num 1 1/num], obj.owner, 'use_short', 'toggle', 'no short', 'use short','','','','red');
+            obj.input_min_length = GraphicButton(obj.panel_search, [0 (num-3)/num 1 1/num], obj.owner, 'min_length', 'input', 'len= ');
+            obj.button_use_exclude = GraphicButton(obj.panel_search, [0 (num-4)/num 1 1/num], obj.owner, 'use_exclude', 'toggle', 'no exclude', 'use exclude','','','','red');
+            obj.input_exclude_dx = GraphicButton(obj.panel_search, [0 (num-5)/num 1 1/num], obj.owner, 'exclude_dx', 'input', 'exc. dx= ');
+            obj.input_exclude_dy = GraphicButton(obj.panel_search, [0 (num-6)/num 1 1/num], obj.owner, 'exclude_dy', 'input', 'exc. dy= ');
+            
+%             obj.button_use_save = GraphicButton(obj.panel_prep, [0 (num-11)/num 1 1/num], obj.owner, 'use_save_images', 'toggle', 'no save', 'save images');
             
             %%%%%%%%%%% panel info %%%%%%%%%%%%%%%%%%%
             
-            obj.panel_info = uipanel('Title', 'info', 'Position', [0.2 0.9 0.8 0.1]);
+            obj.panel_info = uipanel('Title', 'info', 'Position', [0.2 11/12 0.8 1/12]);
             
             obj.button_filename = GraphicButton(obj.panel_info, [0.0 0 0.8 1], obj.owner, 'filename', 'info');
 %             obj.button_filename.control.HorizontalAlignment = 'right';
@@ -154,7 +149,7 @@ classdef FinderGUI < handle
             
             %%%%%%%%%%% panel display %%%%%%%%%%%%%%%%
             
-            obj.panel_display = uipanel('Title', 'display', 'Position', [0.0 0.0 1 0.2]);
+            obj.panel_display = uipanel('Title', 'display', 'Position', [0.0 0.0 1 2/12]);
             
             obj.button_close = GraphicButton(obj.panel_display, [0.0 0.0 0.2 1], obj.owner, '', 'custom', 'CLOSE');
             obj.button_close.Callback = @obj.callback_close;
@@ -175,7 +170,7 @@ classdef FinderGUI < handle
             
             %%%%%%%%%%% panel image %%%%%%%%%%%%%%%%%%
             
-            obj.panel_image = uipanel('Title', '', 'Position', [0.2 0.2 0.8 0.7]);
+            obj.panel_image = uipanel('Title', '', 'Position', [0.2 2/12 0.8 9/12]);
             
             obj.update;
             
@@ -190,8 +185,6 @@ classdef FinderGUI < handle
             for ii = 1:length(obj.buttons)
                 obj.buttons{ii}.update;
             end
-            
-            obj.button_autothresh_val.String = sprintf('%4.1f', obj.owner.latest_thresh);
             
             obj.button_display_which.String = obj.owner.display_which;
             

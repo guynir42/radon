@@ -73,7 +73,7 @@ function [R, finder] = frt(M_in, varargin)
             error(['must input a Finder. class(finder)= ' class(finder)]);
         end
         
-        finder.last_streak = radon.Streak.empty;
+        finder.streak = radon.Streak.empty;
         
     end
     
@@ -85,7 +85,8 @@ function [R, finder] = frt(M_in, varargin)
     end
 
     if ~isempty(finder) % if we have a finder, we MUST get a variance cell array with partial variances
-
+        
+        finder.image = M_in;
         finder.im_size_tr = size(M); % the size of the transposed or un-transposed image
         finder.im_size = size(M_in);
         
@@ -170,7 +171,7 @@ function [R, finder] = frt(M_in, varargin)
 
     % update the finder with any streaks we have found...
     if ~isempty(finder) 
-        finder.finalizeFRT(M_in, transpose, permute(M, [1,3,2]));
+        finder.finalizeFRT(permute(M, [1,3,2]), transpose);
     end
             
 end

@@ -863,13 +863,13 @@ classdef Simulator < handle
             end
             
             % get the Finder results and show them also
-            if obj.use_finder && ~isempty(obj.finder) && ~isempty(obj.finder.streaks)
+            if obj.use_finder && ~isempty(obj.finder) && ~isempty(obj.finder.streak)
                 
-                for ii = 1:length(obj.finder.streaks)
-                    obj.finder.streaks(ii).drawGuidelines(ax, obj.im_size, 15, 'White', use_publishable);
+                for ii = 1:length(obj.finder.streak)
+                    obj.finder.streak(ii).drawGuidelines(ax, obj.im_size, 15, 'White', use_publishable);
                 end
                 
-                obj.finder.streaks(1).drawStats(ax, font_size);
+                obj.finder.streak(1).drawStats(ax, font_size);
                 
             else
                 delete(findobj(ax, 'type', 'line'));

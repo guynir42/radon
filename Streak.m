@@ -17,13 +17,16 @@ classdef Streak < handle
     
     properties % outputs
         
-        im_size; % size of original image (after transposed, if used. can be different than size(input_image))
+        im_size; % size of original image (after transposed, if used. can be different than size(image))
 
-        original_image; % image with minimal processing
-        input_image; % subtracted image given to finder
+        image; % subtracted image given to finder
         radon_image; % full Radon image for the correct transposed
         subframe; % subframe where the streak was located (for short streaks. Otherwise, the same as "radon_image")
         psf; % the PSF, after normalization, used for convolving the image (if any)
+
+        % this is optional, used for viewing the streak in the original, unprocessed image
+        original_image; % image with minimal processing
+        offset_original; % y-then-x offset of top-left corner of the section/crop relative to original image. 
         
         % these help find the correct image where the streak exists
         frame_num = 1; % which frame in the batch
@@ -341,9 +344,9 @@ classdef Streak < handle
         function val = getOriginalBand(obj) % shows the region of the input image in the corresponding radon-subframe of the streak
             
             if obj.transposed
-                val = obj.input_image(obj.radon_x1:obj.radon_x2,:);
+                val = obj.image(obj.radon_x1:obj.radon_x2,:);
             else
-                val = obj.input_image(:,obj.radon_x1:obj.radon_x2);
+                val = obj.image(:,obj.radon_x1:obj.radon_x2);
             end
             
         end
@@ -379,7 +382,7 @@ classdef Streak < handle
             if ~isempty(obj.original_image)
                 I_full = obj.original_image;
             else
-                I_full = obj.input_image;
+                I_full = obj.image;
             end
             
             xywh = obj.getBoxBoundaries(width, width);
@@ -391,8 +394,8 @@ classdef Streak < handle
             
             if x1<1, x1 = 1; end
             if y1<1, y1 = 1; end            
-            if x2>size(obj.input_image,2), x2 = size(obj.input_image,2); end            
-            if y2>size(obj.input_image,1), y2 = size(obj.input_image,1); end
+            if x2>size(obj.image,2), x2 = size(obj.image,2); end            
+            if y2>size(obj.image,1), y2 = size(obj.image,1); end
             
             I = util.img.pad2size(I_full(y1:y2, x1:x2), ceil(width));
             
@@ -405,7 +408,7 @@ classdef Streak < handle
             import util.text.cs;
             import util.text.parse_bool;
             
-            input_image = [];
+            image = [];
             radon_image = [];
             font_size = [];
             use_publishable = [];
@@ -417,8 +420,8 @@ classdef Streak < handle
                 key = varargin{ii};
                 val = varargin{ii+1};
                 
-                if cs(key, 'input_image')
-                    input_image = val;
+                if cs(key, 'image')
+                    image = val;
                 elseif cs(key, 'radon_image')
                     radon_image = val;
                 elseif cs(key, 'font_size')
@@ -435,15 +438,15 @@ classdef Streak < handle
                 font_size = 24;
             end
             
-            if isempty(input_image)
-                input_image = obj.input_image;
+            if isempty(image)
+                image = obj.image;
             end
             
             if isempty(radon_image)
                 radon_image = obj.radon_image;
             end
             
-            if isempty(input_image) && isempty(radon_image)
+            if isempty(image) && isempty(radon_image)
                 disp('cannot use "show" without original or final image!');
                 return;
             end
@@ -458,7 +461,7 @@ classdef Streak < handle
                         
             ax1 = axes('Parent', parent, 'Position', [0.05 0.17 0.4 0.75]);
             
-            if ~isempty(input_image) 
+            if ~isempty(image) 
                 
                 obj.showOriginal(varargin{:}, 'axes', ax1, 'FontSize', font_size);
                 
@@ -502,7 +505,7 @@ classdef Streak < handle
             font_size = [];    
             corner_title = '(a)';
             
-            input_image = [];
+            image = [];
            
             ax = [];
             
@@ -539,8 +542,8 @@ classdef Streak < handle
                     line_offset = val;
                 elseif cs(key, {'rectangle_size', 'rect_size'})
                     rect_size = val;
-                elseif cs(key, 'input_image')
-                    input_image = val;
+                elseif cs(key, 'image')
+                    image = val;
                 elseif cs(key, {'axis', 'axes'})
                     ax = val;
                 elseif cs(key, {'monochrome', 'use_monochrome'})
@@ -561,8 +564,8 @@ classdef Streak < handle
                 use_monochrome = 1;
             end
             
-            if isempty(input_image)
-                input_image = obj.input_image;
+            if isempty(image)
+                image = obj.image;
             end
             
             if use_monochrome                
@@ -575,7 +578,7 @@ classdef Streak < handle
                 ax = gca;
             end
             
-            show(input_image, 'axes', ax, 'autodyn', 1, 'monochrome', use_monochrome); 
+            show(image, 'axes', ax, 'autodyn', 1, 'monochrome', use_monochrome); 
 
             if use_publishable
 
@@ -598,7 +601,7 @@ classdef Streak < handle
             end
 
             if ~isempty(line_offset)
-                obj.drawGuidelines(ax, size(input_image), line_offset, line_color, use_publishable);
+                obj.drawGuidelines(ax, size(image), line_offset, line_color, use_publishable);
             end
             
             ax.FontSize = font_size;
