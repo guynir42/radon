@@ -101,9 +101,12 @@ classdef Finder < handle
         
         % image preprocessing
         use_subtract_mean = 1; % verify the mean of each image is zero
+        use_subtract_median = 1; % verify the mean of each image is zero
         use_conv = 1; % use match filter on data (using the given PSF)        
         use_crop_image = 0; % crop image to fit powers of 2 (does not enlarge)
         crop_size = 2048; % what image size to crop to
+        use_point_source_removal = 1;
+        num_point_sources = 50; % how many point sources can we remove from the image
         
         % search options
         use_short = 1; % search for short streaks
@@ -162,7 +165,7 @@ classdef Finder < handle
         default_exclude_dx;
         default_exclude_dy;
         
-        version = 2.03;
+        version = 2.04;
         
     end
     
@@ -258,6 +261,7 @@ classdef Finder < handle
             obj.radon_image_trans = [];
             obj.last_snr = [];
             obj.streaks = radon.Streak.empty;
+            obj.last_streak = radon.Streak.empty;
             
             % we do not call timing_data.clear, because the variance map is sometimes only calculated per run (not per batch)
             obj.timing_data.clear('subtraction');
@@ -595,9 +599,6 @@ classdef Finder < handle
             
             import util.text.cs;
             import util.img.crop2size;
-            import util.vec.pick_index;
-            import util.stat.sum2;
-            import util.stat.mean2;
             
             input = util.text.InputVars; % parses varargin-pairs
             input.input_var('images', []);
@@ -661,80 +662,25 @@ classdef Finder < handle
                     fprintf('running streak detection on batch= % 2d | frame= % 3d... ', obj.batch_num, obj.frame_num);
                 end
 
-                obj.timing_data.start('subtraction');
-
-                I = obj.input_images(:,:,ii);
+                I = obj.preprocess(obj.input_images(:,:,ii), V, VT, G, GT); % subtract background, remove point sources, get rid of NaN values
                 
-                if obj.use_subtract_mean
-                    I = I - mean2(I);
-                end
-
-                I(isnan(I)) = 0; % If you cut the stars out, replace them with NaNs, then subtract mean (see above) then replace NaNs with zeros.
-                
-                obj.timing_data.finish('subtraction');
-                
-                obj.timing_data.start('convolution');
-                
-                if obj.use_conv && ~isempty(obj.psf)
-                    I = filter2(pick_index(obj.psf, obj.frame_num, 3), I);
-                end
-                
-                obj.timing_data.finish('convolution');
-                
-                obj.timing_data.start('frt');
-                
-                obj.streaks = radon.Streak.empty;
-                obj.last_streak = radon.Streak.empty;
-                R = radon.frt(I, 'finder', obj, 'expand', obj.use_expand);
-                temp_streaks = obj.streaks; % keep this here while filling the list with the transposed image
-                obj.streaks = radon.Streak.empty;
-                obj.last_streak = radon.Streak.empty;
-                
-                if obj.use_only_one==0 || obj.use_recursive
-                    RT = radon.frt(obj.subtracted_image, 'finder', obj, 'expand', obj.use_expand, 'trans', 1);
+                if isscalar(I)
+                    disp(['adapting the SNR value ' num2str(I) ' from 1st pass']);
+                    new_snr = I; % this only happens if a point source search triggers a high threshold FRT search and finds a really bright streak... 
                 else
-                    RT = radon.frt(I, 'finder', obj, 'expand', obj.use_expand, 'trans', 1);
+                    new_snr = obj.sendToFRT(obj.input_images(:,:,ii), I, V, VT, G, GT); % send to FRT, transpose, remove streaks, find best SNR
                 end
-                
-                obj.streaks = [temp_streaks obj.streaks]; % combine the two lists
-                
-                if obj.use_only_one && ~obj.use_recursive % if you get two streaks (one for each transpose) but only want the best one
-                    obj.streaks = obj.bestStreak;
-                end
-                
-                obj.timing_data.finish('frt');
-                                        
-                obj.radon_image = R./sqrt(V.*sqrt(sum2(obj.psf.^2).*G).*sum2(obj.psf)); % this normalization makes sure the result is in units of S/N, regardless of the normalization of the PSF. 
-                obj.radon_image_trans = RT./sqrt(VT.*sqrt(sum2(obj.psf.^2).*GT).*sum2(obj.psf)).*GT; % one makes sure the PSF is unity normalized, the other divides by the amount of noise "under" the PSF
-                
-                % check if we want to save a copy of the subframe and input/final image in each of the streaks... 
-                if obj.use_save_images
-                    for jj = 1:length(obj.streaks)
-                        
-                        obj.streaks(jj).input_image = obj.input_images(:,:,ii);
-                        
-                        if obj.streaks(jj).transposed
-                            obj.streaks(jj).radon_image = obj.radon_image_trans;
-                        else
-                            obj.streaks(jj).radon_image = obj.radon_image;
-                        end
-                        
-                    end
-                else
-                    for jj = 1:length(obj.streaks)
-                        obj.streaks(jj).input_image = [];
-                        obj.streaks(jj).subframe = [];
-                        obj.streaks(jj).radon_image = [];
-                    end
-                end
-                
-                new_snr = max(obj.last_snr, obj.bestSNR);
                 
                 if obj.debug_bit
-                    fprintf(' | length= %d | bestSNR= %f\n', obj.bestLength, new_snr);
+                    fprintf(' | length= %d | bestSNR= %f\n', round(obj.bestLength), new_snr);
                 end
                 
                 obj.snr_values = [obj.snr_values new_snr];
+                
+                if ~isempty(obj.streaks)
+                    if obj.debug_bit, disp(['saving streaks with SNR= ' util.text.print_vec(new_snr)]); end
+                    obj.prev_streaks = [obj.prev_streaks obj.streaks];                    
+                end
                 
                 obj.timing_data.start('show');
                 
@@ -744,15 +690,169 @@ classdef Finder < handle
                 
                 obj.timing_data.finish('show');
                 
-                if ~isempty(obj.streaks)
-                    if obj.debug_bit, disp(['saving streaks with SNR= ' util.text.print_vec(new_snr)]); end
-                    obj.prev_streaks = [obj.prev_streaks obj.streaks];                    
-                end
                 
                 drawnow;
                 
             end
             
+        end
+        
+        function I_filtered = preprocess(obj, I_original, V, VT, G, GT)
+
+            import util.vec.pick_index;
+            import util.stat.max2;
+            import util.stat.mean2;
+            import util.stat.median2;
+            
+            obj.timing_data.start('subtraction');
+
+            I = I_original;
+                        
+            if obj.use_subtract_median
+                I = I - median2(I);
+            end
+            
+            if obj.use_subtract_mean
+                I = I - mean2(I);
+            end
+
+            I(isnan(I)) = 0; % If you cut the stars out, replace them with NaNs, then subtract mean (see above) then replace NaNs with zeros.
+
+            obj.timing_data.finish('subtraction');
+
+            obj.timing_data.start('convolution');
+
+            if obj.use_conv && ~isempty(obj.psf)
+                I_filtered = filter2(pick_index(obj.psf, obj.frame_num, 3), I);
+            else
+                I_filtered = I;
+            end
+
+            obj.timing_data.finish('convolution');
+
+            obj.timing_data.start('point_search');
+
+            if obj.use_point_source_removal
+
+                I_filtered_var = filter2(pick_index(obj.psf, obj.frame_num, 3), I./sqrt(obj.input_var));
+                
+                for jj = 1:obj.num_point_sources
+
+                    if mod(jj,10)==0, fprintf('% 4d\n', jj); end
+                    
+                    [mx, idx] = max2(I_filtered_var);
+
+                    if mx>obj.threshold
+                        
+                        if jj==1 % maybe the "point sources" are actually pieces of a very bright streak, so try to run high-threshold detection on them
+                            if obj.debug_bit, fprintf(' (PS peak: %f... triggered 1st pass with high thresh) ', mx); end
+                            new_snr = obj.sendToFRT(I_original,I_filtered,V,VT,G,GT);
+                            if new_snr>mx.*sqrt(obj.min_length./obj.psf_sigma) % the streak has to be brighter than the point source! 
+                                I = new_snr;
+                                return; % this happens only if we found a very bright streak that triggered the point source detector
+                            end
+                        end
+                        
+                        delta = ceil(obj.psf_sigma.*2);
+                        x_low = idx(2)-delta;
+                        if x_low<1, x_low = 1; end
+                        x_high = idx(2)+delta;
+                        if x_high>size(I,2), x_high=size(I,2); end
+                        
+                        y_low = idx(1)-delta;
+                        if y_low<1, y_low = 1; end
+                        y_high = idx(1)+delta;
+                        if y_high>size(I,1), y_high=size(I,1); end
+                        
+                        I(y_low:y_high,x_low:x_high) = NaN;
+                        
+                        util.plot.show(I, 'dyn', 100); drawnow; % debug only! 
+                        
+                    else
+                        break; % if there are no more bright point sources, just move on
+                    end
+
+                end
+
+                if jj>1 % if any sources were removed refind the mean and then get rid of the NaNs
+
+                    if obj.use_subtract_median
+                        I = I - median2(I);
+                    end
+                    
+                    if obj.use_subtract_mean
+                        I = I - mean2(I);
+                    end
+
+                    I(isnan(I)) = 0; % If you cut the stars out, replace them with NaNs, then subtract mean (see above) then replace NaNs with zeros.
+
+                    if obj.use_conv && ~isempty(obj.psf) % also update the filtered image
+                        I_filtered = filter2(pick_index(obj.psf, obj.frame_num, 3), I);
+                    else
+                        I_filtered = I;
+                    end
+
+                end
+                
+            end
+
+            obj.timing_data.finish('point_search');
+
+        end
+        
+        function new_snr = sendToFRT(obj, I_original, I_filtered, V, VT, G, GT)
+
+            import util.stat.sum2;
+            
+            obj.timing_data.start('frt');
+
+            obj.streaks = radon.Streak.empty;
+            obj.last_streak = radon.Streak.empty;
+            R = radon.frt(I_filtered, 'finder', obj, 'expand', obj.use_expand);
+            temp_streaks = obj.streaks; % keep this here while filling the list with the transposed image
+            obj.streaks = radon.Streak.empty;
+            obj.last_streak = radon.Streak.empty;
+
+            if obj.use_only_one==0 || obj.use_recursive
+                RT = radon.frt(obj.subtracted_image, 'finder', obj, 'expand', obj.use_expand, 'trans', 1);
+            else
+                RT = radon.frt(I_filtered, 'finder', obj, 'expand', obj.use_expand, 'trans', 1);
+            end
+
+            obj.streaks = [temp_streaks obj.streaks]; % combine the two lists
+
+            if obj.use_only_one && ~obj.use_recursive % if you get two streaks (one for each transpose) but only want the best one
+                obj.streaks = obj.bestStreak;
+            end
+
+            obj.timing_data.finish('frt');
+
+            obj.radon_image = R./sqrt(V.*sqrt(sum2(obj.psf.^2).*G).*sum2(obj.psf)); % this normalization makes sure the result is in units of S/N, regardless of the normalization of the PSF. 
+            obj.radon_image_trans = RT./sqrt(VT.*sqrt(sum2(obj.psf.^2).*GT).*sum2(obj.psf)).*GT; % one makes sure the PSF is unity normalized, the other divides by the amount of noise "under" the PSF
+
+            % check if we want to save a copy of the subframe and input/final image in each of the streaks... 
+            if obj.use_save_images
+                for jj = 1:length(obj.streaks)
+
+                    obj.streaks(jj).input_image = I_original;
+
+                    if obj.streaks(jj).transposed
+                        obj.streaks(jj).radon_image = obj.radon_image_trans;
+                    else
+                        obj.streaks(jj).radon_image = obj.radon_image;
+                    end
+
+                end
+            else
+                for jj = 1:length(obj.streaks)
+                    obj.streaks(jj).input_image = [];
+                    obj.streaks(jj).subframe = [];
+                    obj.streaks(jj).radon_image = [];
+                end
+            end
+
+            new_snr = max(obj.last_snr, obj.bestSNR);
+
         end
         
         function scan(obj, M, transpose) % do this on the final Radon image and on partial Radon matrices (for short streaks)
@@ -834,7 +934,7 @@ classdef Finder < handle
             
             if ~isempty(obj.last_streak) && obj.last_streak.radon_dx < obj.min_length % kill streaks that are too short (e.g. bright point-sources)
                 obj.last_streak = radon.Streak.empty;
-                obj.last_snr = 0;
+%                 obj.last_snr = 0;
             end
 
             if ~isempty(obj.last_streak) % if we found a streak
@@ -850,7 +950,7 @@ classdef Finder < handle
                 if obj.use_recursive && length(obj.streaks)<obj.recursion_depth % keep calling FRT until all streaks are found...
                     
                     if obj.debug_bit>9 % use debug_bit=10 to watch the streaks getting removed (make sure no edges are left!)
-                        util.plot.show(obj.subtracted_image);
+                        util.plot.show(obj.subtracted_image, 'bias', 0, 'dyn', 100);
                         title(sprintf('num streaks found: %d | transpose: %d', length(obj.streaks), transpose));
                         drawnow;
                         pause(1);

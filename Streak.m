@@ -18,7 +18,8 @@ classdef Streak < handle
     properties % outputs
         
         im_size; % size of original image (after transposed, if used. can be different than size(input_image))
-        
+
+        original_image; % image with minimal processing
         input_image; % subtracted image given to finder
         radon_image; % full Radon image for the correct transposed
         subframe; % subframe where the streak was located (for short streaks. Otherwise, the same as "radon_image")
@@ -60,6 +61,14 @@ classdef Streak < handle
         radon_ydy_cov; % cross correlation of the slope-position errors
         radon_x1; % start of subsection of the original image (may be a transposedd input image)
         radon_x2; % end of subsection of the original image (may be a transposedd input image)
+        
+        % profiler results
+        amplitdues; % amplitdue of peak intensity along the streak length
+        offsets; % lateral offset along the streak length
+        spreads; % spread or width of the streak along its length
+        line_start;
+        line_end;
+        is_astronomical = 1;
         
     end
     
@@ -366,7 +375,13 @@ classdef Streak < handle
             if nargin<2 || isempty(width)
                 width = obj.L.*2;
             end
-                        
+            
+            if ~isempty(obj.original_image)
+                I_full = obj.original_image;
+            else
+                I_full = obj.input_image;
+            end
+            
             xywh = obj.getBoxBoundaries(width, width);
             
             x1 = xywh(1);
@@ -379,7 +394,7 @@ classdef Streak < handle
             if x2>size(obj.input_image,2), x2 = size(obj.input_image,2); end            
             if y2>size(obj.input_image,1), y2 = size(obj.input_image,1); end
             
-            I = util.img.pad2size(obj.input_image(y1:y2, x1:x2), width);
+            I = util.img.pad2size(I_full(y1:y2, x1:x2), ceil(width));
             
         end
         
