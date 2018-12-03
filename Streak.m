@@ -29,9 +29,10 @@ classdef Streak < handle
         offset_original; % y-then-x offset of top-left corner of the section/crop relative to original image. 
         
         % these help find the correct image where the streak exists
-        frame_num = 1; % which frame in the batch
-        batch_num = 1; % which batch in the run
         filename = ''; % which file it came from 
+        batch_num = 1; % which batch in the run
+        frame_num = 1; % which frame in the batch
+        section_num = 1; % which section in the full image (if sectioning is used)
         
         threshold = []; % which threshold was used (if any)
         is_short = 0; % if yes, the subframe size is smaller than the full radon size
@@ -632,6 +633,26 @@ classdef Streak < handle
         
         function drawGuidelines(obj, ax, im_size, line_offset, line_color, use_publishable) % draw two dashed lines around the location of the streak in the original image
                         
+                if nargin<2 || isempty(ax)
+                    ax = gca;
+                end
+                
+                if nargin<3 || isempty(im_size)
+                    im_size = 1024;
+                end
+                
+                if nargin<4 || isempty(line_offset)
+                    line_offset = [];
+                end
+                
+                if nargin<5 || isempty(line_color)
+                    line_color = 'red';
+                end
+                
+                if nargin<6 || isempty(use_publishable)
+                    use_publishable = 0;
+                end
+            
                 if line_offset==1
                     line_offset = 0.02*im_size(1);
                 end

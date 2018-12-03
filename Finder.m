@@ -453,6 +453,15 @@ classdef Finder < handle
             end
         end
         
+        function val = getGeometricFactor(obj, m_step)
+        
+%             S = 2^(m_step+1)-1;
+            S = 2^m_step;
+            th = atand((-S+1:S-1)./S);
+            val = max(abs(cosd(th)), abs(sind(th))); % geometric factor correction to the S/N
+            
+        end
+        
     end
     
     methods % setters
@@ -481,11 +490,12 @@ classdef Finder < handle
                 
             end
             
-            obj.input_var = val;
-            
+            obj.noise_var = []; % will be lazy loaded
             obj.var_scalar = []; % will be lazy loaded
-            obj.var_map = [];
+            obj.var_map = []; % will be lazy loaded
             obj.radon_var_map = {}; % will be lazy loaded
+            
+            obj.input_var = val;
             
         end
         
@@ -584,7 +594,9 @@ classdef Finder < handle
         
     methods % calculations
     
-        function input(obj, varargin) % THIS IS THE USEFUL METHOD (input images, variance and PSF to find streaks)
+        function streaks = input(obj, varargin) % THIS IS THE USEFUL METHOD (input images, variance and PSF to find streaks)
+            
+            import util.text.cs;
             
             I = []; % temporary storage for input image.
             
@@ -611,7 +623,12 @@ classdef Finder < handle
             obj.clear;
             obj.image = I;
             obj.parse(varargin{:}); % parse the rest of the inputs
+            
             obj.run; % do the actual calculations. 
+            
+            if nargout>0
+                streaks = obj.streak;
+            end
             
         end
             
@@ -665,6 +682,10 @@ classdef Finder < handle
                     obj.section_num = val;
                 elseif cs(key, 'offset_section', 'corner')
                     obj.offset_section = val;
+                elseif cs(key, 'was_convolved')
+                    obj.was_convolved = parse_bool(val);
+                elseif cs(key, 'original_image')
+                    obj.original_image = val;
                 end
                 
             end
@@ -705,8 +726,6 @@ classdef Finder < handle
             import util.img.crop2size;
             import util.stat.mean2;
             import util.stat.median2;
-            
-            obj.image = obj.image;
             
             if obj.use_crop % use this to crop down to power of 2
                 [obj.image, gap] = crop2size(obj.image, obj.crop_size);
@@ -836,12 +855,15 @@ classdef Finder < handle
             end
             
             V = obj.getRadonVariance(transpose, m);
-            S = (size(M,3)+1)/2;
-            th = atand((-S+1:S-1)./S);
-            G = max(abs(cosd(th)), abs(sind(th))); % geometric factor correction to the S/N
+            P = obj.getNormFactorPSF;
+            
+%             S = (size(M,3)+1)/2;
+%             th = atand((-S+1:S-1)./S);
+%             G = max(abs(cosd(th)), abs(sind(th))); % geometric factor correction to the S/N
+            G = obj.getGeometricFactor(m);
             G = util.vec.topages(G);
             
-            SNR = double(M)./sqrt(V*obj.getNormFactorPSF.*G); % this should be normalized to SNR units... 
+            SNR = double(M)./sqrt(V.*P.*G); % this should be normalized to SNR units... 
             SNR_final = SNR; % copy not to be saved (e.g. exclusions in the middle)
             
             if obj.use_exclude % get rid of vertical/horizontal lines
@@ -876,10 +898,16 @@ classdef Finder < handle
         
         function finalizeFRT(obj, radon_image, transpose) % call this at the end of the FRT function, if there is a finder
 
+            m = log2(size(radon_image,2)+1)-1; % logarithmic step we are in
+            V = obj.getRadonVariance(transpose, m);
+            V = permute(V, [1,3,2]);
+            P = obj.getNormFactorPSF;
+            G = obj.getGeometricFactor(m);
+            
             if transpose
-                obj.radon_image_trans = radon_image;
+                obj.radon_image_trans = radon_image./sqrt(V.*P.*G);
             else
-                obj.radon_image = radon_image;
+                obj.radon_image = radon_image./sqrt(V.*P.*G);
             end
             
             if ~isempty(obj.streak) && obj.streak.radon_dx < obj.min_length % kill streaks that are too short (e.g. bright point-sources)
