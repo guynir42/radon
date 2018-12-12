@@ -135,7 +135,7 @@ classdef Finder < handle
         min_length = 32; % for finding short streaks (streak can be 1/cos(th) or 1/sin(th) larger)
         threshold = 10; % in units of S/N
         use_only_one = 1; % if you happen to get two streaks, one for transposed and one for untransposed, choose only the best one. Ignored when using recursion to find multiple streaks. 
-        subtract_psf_widths = 3; % the width to subtract around the found position (when subtracting streaks). Units of PSF sigma <---- Do we need this anymore??
+        subtract_psf_widths = 5; % the width to subtract around the found position (when subtracting streaks). Units of PSF sigma <---- Do we need this anymore??
         
         % post-Radon processing (i.e. exclusions)
         use_exclude = 0; % if you want to remove the row/column noise
@@ -490,12 +490,18 @@ classdef Finder < handle
                 
             end
             
-            obj.noise_var = []; % will be lazy loaded
-            obj.var_scalar = []; % will be lazy loaded
-            obj.var_map = []; % will be lazy loaded
-            obj.radon_var_map = {}; % will be lazy loaded
-            
-            obj.input_var = val;
+            if val==obj.input_var
+                % pass
+            else
+                
+                obj.noise_var = []; % will be lazy loaded
+                obj.var_scalar = []; % will be lazy loaded
+                obj.var_map = []; % will be lazy loaded
+                obj.radon_var_map = {}; % will be lazy loaded
+
+                obj.input_var = val;
+                
+            end
             
         end
         
@@ -680,8 +686,8 @@ classdef Finder < handle
                     obj.frame_num = val;
                 elseif cs(key, 'section_number')
                     obj.section_num = val;
-                elseif cs(key, 'offset_section', 'corner')
-                    obj.offset_section = val;
+                elseif cs(key, 'offset_section', 'offset_original', 'corner')
+                    obj.offset_original = val;
                 elseif cs(key, 'was_convolved')
                     obj.was_convolved = parse_bool(val);
                 elseif cs(key, 'original_image')

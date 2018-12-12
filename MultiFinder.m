@@ -22,8 +22,8 @@ classdef MultiFinder < handle
     properties % objects
         
         finder@radon.Finder; 
-        prof@radon.Profiler;
-%         class@radon.Classifier;
+%         prof@radon.Profiler;
+        class@radon.Classifier;
         
         streaks@radon.Streak; % all streaks saved up to the last "reset"
         asteroids@radon.Streak; % everything that was classified as NEO
@@ -40,6 +40,7 @@ classdef MultiFinder < handle
     properties % inputs/outputs
         
         image;
+        image_subtracted; % full frame, non filtered image, with streaks removed
         image_processed; % current image or section that undergoes processing and streak subtractions
         image_output; % image after truncating bright pixels and removing streaks
         image_sections = {}; % cell used to store sections of the image
@@ -97,7 +98,7 @@ classdef MultiFinder < handle
                 obj.finder.use_short = 1;
                 obj.finder.use_only_one = 0;
                 
-                obj.prof = radon.Profiler;
+                obj.class = radon.Classifier;
                 
             end
             
@@ -110,7 +111,7 @@ classdef MultiFinder < handle
         function reset(obj)
             
             obj.finder.reset;
-            obj.prof.reset;
+%             obj.prof.reset;
               
             obj.streaks_all = radon.Streak.empty;
             obj.asteroids_all = radon.Streak.empty;
@@ -180,6 +181,13 @@ classdef MultiFinder < handle
             
         end
         
+        function set.image(obj, val)
+            
+            obj.image = val;
+            obj.image_subtracted = val;
+            
+        end
+        
     end
     
     methods % calculations
@@ -189,8 +197,8 @@ classdef MultiFinder < handle
             input = util.text.InputVars;
             input.use_ordered_numeric = 1;
             input.input_var('image', []);
-            input.input_var('psf', [], 'input_psf');
             input.input_var('variance', [], 'input_variance');
+            input.input_var('psf', [], 'input_psf');
             input.input_var('filename', '');
             input.input_var('batch_num', []);
             input.input_var('frame_num', []);
@@ -202,7 +210,6 @@ classdef MultiFinder < handle
             
             obj.clear;
             
-            varargin = input.output_vars;
             obj.image = input.image;
             
             if ~isempty(input.psf)
@@ -220,20 +227,83 @@ classdef MultiFinder < handle
                 for ii = 1:length(obj.image_sections)
                     
                     obj.image_processed = obj.preprocess(obj.image_sections{ii});
-                    obj.run(varargin{:}, 'offset', obj.offset_sections{ii}, 'section', ii, 'variance', obj.var_sections{ii});
+                    obj.runSection('offset', obj.offset_sections{ii}, 'section', ii,...
+                        'variance', obj.var_sections{ii}, 'psf', input.psf, ...
+                        'filename', input.filename, 'batch', input.batch_num, 'frame', input.frame_num);
                     
                 end
                 
             else
                 
                 obj.image_processed = obj.preprocess(obj.image);
-                obj.run(varargin{:}, 'variance', obj.input_var);
+                obj.runSection('variance', obj.input_var, 'psf', input.psf,...
+                    'filename', input.filename, 'batch', input.batch_num, 'frame', input.frame_num);
                 
+            end
+            
+            % add final view of full image and streaks with types
+            
+%             obj.calcProfiles;
+%             obj.calcClassifications;
+
+            obj.streaks_all = [obj.streaks_all obj.streaks];
+            obj.asteroids_all = [obj.asteroids_all obj.asteroids];                
+            obj.satellites_all = [obj.satellites_all obj.satellites];                
+            obj.artefacts_all = [obj.artefacts_all obj.artefacts];
+            
+        end
+        
+        function makeSections(obj, varargin)
+            
+            S = size(obj.image);
+            
+            axis1 = 1:obj.section_size:S(1);
+            axis2 = 1:obj.section_size:S(2);
+            
+            obj.image_sections = {};
+            obj.offset_sections = {};
+            obj.var_sections = {};
+            
+            for ii = 1:length(axis1)
+                for jj = 1:length(axis2)
+                
+                    if ii<length(axis1)
+                        end_point1 = axis1(ii+1)-1;
+                    else
+                        end_point1 = S(1);
+                    end
+                    
+                    if jj<length(axis2)
+                        end_point2 = axis2(jj+1)-1;
+                    else
+                        end_point2 = S(2);
+                    end
+                
+                    obj.image_sections{end+1} = obj.image(axis1(ii):end_point1, axis2(jj):end_point2);
+                    obj.offset_sections{end+1} = [axis1(ii), axis2(jj)] - 1; % need to add this to y,x position in section to translate to full image
+                    
+                    if ~isscalar(obj.input_var)
+                        obj.var_sections{end+1} = obj.input_var(axis1(ii).end_point1, axis2(jj):end_point2);
+                    else
+                        obj.var_sections{end+1} = obj.input_var;
+                    end
+                    
+                end
             end
             
         end
         
-        function run(obj, varargin)
+        function I_out = preprocess(obj, I)
+        
+            I_out = I;
+            
+            if obj.use_conv
+                I_out = filter2(obj.psf, I_out);
+            end
+            
+        end
+        
+        function runSection(obj, varargin)
             
             input = util.text.InputVars;
             input.input_var('variance',[]);
@@ -241,6 +311,7 @@ classdef MultiFinder < handle
             input.input_var('batch_num', []);
             input.input_var('frame_num', []);
             input.input_var('section', 1, 'section_number');
+            input.input_var('offset', [0 0]);
             input.scan_vars(varargin{:});
             
             I = obj.image_processed;
@@ -251,11 +322,7 @@ classdef MultiFinder < handle
             elseif ismatrix(V)
                 V = util.stat.median2(V);
             end
-            
-            if obj.use_conv
-                I = filter2(obj.psf, I);
-            end
-            
+                        
             if obj.use_scan_thresh
                 log_values = log2(obj.threshold):log2(util.stat.max2(I)./sqrt(V));
                 thresh_values = flip(2.^log_values);
@@ -287,19 +354,40 @@ classdef MultiFinder < handle
                     new_streaks = obj.finder.input('image', I, 'variance', input.variance,...
                          'was_convolved', obj.use_conv, 'original_image', obj.image, ...
                          'filename', input.filename, 'batch_num', input.batch_num,...
-                         'frame_num', input.frame_num, 'section_num', input.section);
+                         'frame_num', input.frame_num, 'section_num', input.section, 'offset', input.offset);
                     
                     if isempty(new_streaks)
                         break;
-                    end                    
+                    end
+                    
                     for kk = 1:length(new_streaks)
-                        I = new_streaks(kk).subtractStreak(I);
+                        
+                        new_streaks(kk).prof.input(obj.image_subtracted);
+                        obj.class.input(new_streaks(kk));
+                        
+                        I = new_streaks(kk).subtractStreak('image', I, 'replace', NaN);
+                        obj.image_subtracted = new_streaks(kk).subtractStreak('image', obj.image_subtracted, 'replace', NaN, 'offset', new_streaks(kk).offset_original);
+                        
+                        % add the new streaks to the list
+                        obj.streaks = [obj.streaks new_streaks(kk)];
+                        
+                        if new_streaks(kk).is_asteroid
+                            obj.asteroids = [obj.asteroids new_streaks(kk)];
+                        end
+                        
+                        if new_streaks(kk).is_satellite
+                            obj.satellites = [obj.satellites new_streaks(kk)];
+                        end
+                        
+                        if new_streaks(kk).is_artefact
+                            obj.artefacts = [obj.artefacts new_streaks(kk)];
+                        end
+                        
                     end
                     
                     obj.image_output = I;
                     
                     % if we found any new streaks
-                    obj.streaks = [obj.streaks new_streaks];
                     temp_streaks = [temp_streaks new_streaks];
                     
                     if obj.gui.check
@@ -317,70 +405,40 @@ classdef MultiFinder < handle
                 
             end
             
-            obj.calcProfiles;
-            obj.calcClassifications;
-
-            obj.streaks_all = [obj.streaks_all obj.streaks];
-            obj.asteroids_all = [obj.asteroids_all obj.asteroids];                
-            obj.satellites_all = [obj.satellites_all obj.satellites];                
-            obj.artefacts_all = [obj.artefacts_all obj.artefacts];
-
-        end
-        
-        function makeSections(obj, varargin)
-            
-            S = size(obj.image);
-            
-            axis1 = 1:obj.section_size:S(1);
-            axis2 = 1:obj.section_size:S(2);
-            
-            obj.image_sections = {};
-            obj.offset_sections = {};
-            obj.var_sections = {};
-            
-            for ii = 1:length(axis1)
-                for jj = 1:length(axis2)
-                
-                    if ii<length(axis1)
-                        end_point1 = axis1(ii+1)-1;
-                    else
-                        end_point1 = S(1);
-                    end
-                    
-                    if jj<length(axis2)
-                        end_point2 = axis2(jj+1)-1;
-                    else
-                        end_point2 = S(2);
-                    end
-                
-                    obj.image_sections{end+1} = obj.image(axis1(ii):end_point1, axis2(jj):end_point2);
-                    obj.offset_sections{end+1} = [axis1(ii), axis2(ii)] - 1; % need to add this to y,x position in section to translate to full image
-                    
-                    if ~isscalar(obj.input_var)
-                        obj.var_sections{end+1} = obj.input_var(axis1(ii).end_point1, axis2(jj):end_point2);
-                    else
-                        obj.var_sections{end+1} = obj.input_var;
-                    end
-                    
-                end
-            end
-        end
-        
-        function I_out = preprocess(obj, I)
-        
-            I_out = I;
-            
-            if obj.use_conv
-                I_out = filter2(obj.psf, I_out);
-            end
-            
         end
         
         function calcProfiles(obj)
             
+            for ii = 1:length(obj.streaks)
+                
+                I = obj.image;
+                
+                for jj = 1:length(obj.streaks)
+                    
+                    if ii==jj, continue; end
+                    
+                    I = obj.streaks(jj).subtractStreak('image', I, 'replace', NaN, 'offset', obj.streaks(jj).offset_original);
+                    
+                end
+                
+                if obj.gui.check && 0
+                    
+                    util.plot.show(I, 'bias', 0, 'dyn', 10, 'ax', obj.gui.axes_image);
+                    xlabel(obj.gui.axes_image, ['ii= ' num2str(ii)]);
+                    obj.streaks(ii).drawGuidelines('ax', obj.gui.axes_image, 'size', size(I), 'offset', obj.streaks(ii).offset_original);
+                    pause(2);
+                    
+                end
+                
+                obj.streaks(ii).prof.input('image', I);
+                    
+            end
+            
         end
         
         function calcClassifications(obj)
+            
+            
             
         end
         
@@ -404,6 +462,29 @@ classdef MultiFinder < handle
             
         end
         
+        function showOriginal(obj, varargin)
+                        
+            input = util.text.InputVars;
+            input.input_var('axes', [], 'axis');
+            input.input_var('section', [], 'section_number');
+            input.scan_vars(varargin{:});
+            
+            if isempty(input.axes)
+                if obj.gui.check
+                    input.axes = obj.gui.axes_image;
+                else
+                    input.axes = gca;
+                end 
+            end
+            
+            util.plot.show(obj.image, varargin{:});
+            
+            for ii = 1:length(obj.streaks)
+                obj.streaks(ii).drawGuidelines('ax', input.axes, 'offset', obj.streaks(ii).offset_original);
+            end
+            
+        end
+        
         function showProcessed(obj, varargin)
             
             input = util.text.InputVars;
@@ -421,6 +502,7 @@ classdef MultiFinder < handle
             end
             
             util.plot.show(obj.image_processed, 'axes', input.axes, 'bias', 0, 'dyn', input.threshold);
+            
             num_sections = 1;
             if ~isempty(obj.image_sections) && obj.use_sections
                 num_sections = length(obj.image_sections);
@@ -431,7 +513,8 @@ classdef MultiFinder < handle
             for ii = 1:length(obj.streaks)
                 
                 if input.section==obj.streaks(ii).section_num
-                    obj.streaks(ii).drawGuidelines(input.axes, size(obj.image_processed), 15, 'red');
+                    
+                    obj.streaks(ii).drawGuidelines('ax', input.axes, 'size', size(obj.image_processed), 'line_dist', 15);
                     counter = counter + 1;
                 end
                 
