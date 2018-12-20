@@ -490,9 +490,7 @@ classdef Finder < handle
                 
             end
             
-            if val==obj.input_var
-                % pass
-            else
+            if isempty(val) || isempty(obj.input_var) || val~=obj.input_var
                 
                 obj.noise_var = []; % will be lazy loaded
                 obj.var_scalar = []; % will be lazy loaded
