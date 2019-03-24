@@ -709,10 +709,10 @@ classdef Profiler < handle
             
             obj.variability = std(b);
             
-%             obj.amp_lowpass = lowpass(obj.amplitudes,obj.lowpass_freq);
+%             obj.amp_lowpass = obj.lowpass(obj.amplitudes);
             
-            obj.amp_lowpass = lowpass(a, obj.lowpass_freq, 1);
-%             obj.amp_lowpass = lowpass(obj.amplitudes, obj.lowpass_freq, 1);
+            obj.amp_lowpass = obj.lowpass(a);
+%             obj.amp_lowpass = obj.lowpass(obj.amplitudes);
 %             obj.amp_lowpass = obj.amp_lowpass(obj.line_start:obj.line_end);
 
             obj.glint_power = std(obj.amp_lowpass)./sqrt(median(abs(obj.amp_lowpass)));
@@ -1010,6 +1010,19 @@ classdef Profiler < handle
             
         end
         
+        function data_low = lowpass(obj, data)
+            
+            data_f = fft(data);
+            
+            cutoff = length(data).*obj.lowpass_freq./2;
+            
+            data_f_low = data_f;
+            data_f_low(ceil(cutoff):end-floor(cutoff)) = 0;
+            
+            data_low = real(ifft(data_f_low));
+            
+        end
+        
     end
     
     methods % plotting tools / GUI
@@ -1065,7 +1078,7 @@ classdef Profiler < handle
             
                 hold(input.axes, 'on');
                 plot(input.axes, obj.line_start+2:obj.line_end-2, obj.amplitudes(obj.line_start+2:obj.line_end-2));
-    %             plot(input.axes, obj.line_start:obj.line_end, lowpass(obj.amplitudes(obj.line_start:obj.line_end), obj.lowpass_freq));
+    %             plot(input.axes, obj.line_start:obj.line_end, obj.lowpass(obj.amplitudes(obj.line_start:obj.line_end)));
                 plot(input.axes, obj.line_start+2:obj.line_end-2, obj.amp_lowpass);
                 input.axes.NextPlot = prev_hold_state;
                 
