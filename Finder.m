@@ -134,8 +134,10 @@ classdef Finder < handle
         use_short = 1; % search for short streaks
         min_length = 32; % for finding short streaks (streak can be 1/cos(th) or 1/sin(th) larger)
         threshold = 10; % in units of S/N
-        use_only_one = 1; % if you happen to get two streaks, one for transposed and one for untransposed, choose only the best one. Ignored when using recursion to find multiple streaks. 
+        use_only_one = 1; % if you happen to get two streaks, one for transposed and one for untransposed, choose only the best one. 
         subtract_psf_widths = 5; % the width to subtract around the found position (when subtracting streaks). Units of PSF sigma <---- Do we need this anymore??
+        midpoint_coincidence = 2; % streaks found in both transpositions with midpoints closer than this radius are considered the same
+        angle_coincidence = 20; % % streaks found in both transpositions with th (or 180-th) closer than this radius are considered the same
         
         % post-Radon processing (i.e. exclusions)
         use_exclude = 0; % if you want to remove the row/column noise
@@ -478,9 +480,18 @@ classdef Finder < handle
             
         end
         
+        function set.im_size(obj, val)
+            
+            if ~isequaln(obj.im_size, val)
+                obj.im_size = val;
+                obj.radon_var_uni = {};
+            end
+            
+        end
+        
         function set.input_var(obj, val) % also clears the lazy loaded "noise_var" and "radon_var_map"
             
-            if ~isempty(val) && ~isscalar(val)
+            if ~isempty(val) && ~isscalar(val) && ~isempty(obj.im_size)
                 
                 if ~isempty(obj.image) && (size(val,1)~=obj.im_size(1) || size(val,2)~=obj.im_size(2))
                     error('Size mismatch between image size %s and variance size %s', util.text.print_vec(obj.im_size, 'x'), util.text.print_vec(size(val), 'x'));
@@ -490,7 +501,7 @@ classdef Finder < handle
                 
             end
             
-            if isempty(val) || isempty(obj.input_var) || val~=obj.input_var
+            if ~isequaln(obj.input_var, val)
                 
                 obj.noise_var = []; % will be lazy loaded
                 obj.var_scalar = []; % will be lazy loaded
@@ -584,6 +595,28 @@ classdef Finder < handle
             
             [~,idx] = max([obj.streak.snr]);
             val = obj.streak(idx);
+            
+        end
+        
+        function val = checkCoincidence(obj) % find if the two streaks we detected are the same one...
+            
+            if length(obj.streak)<2 % must have two streaks to check for coincidence
+                val = 0;
+                return;
+            end
+            
+            s1 = obj.streak(1);
+            s2 = obj.streak(2);
+            
+            midpoint_dist = sqrt((s1.midpoint_x-s2.midpoint_x).^2+(s1.midpoint_y-s2.midpoint_y).^2);
+            
+            angle_dist = min(abs(mod(s1.th,180)-mod(s2.th,180)), abs(180-mod(s1.th,180)-mod(s2.th,180)));
+            
+            if midpoint_dist<obj.midpoint_coincidence.*max(s1.L, s2.L) && angle_dist<obj.angle_coincidence
+                val = 1;
+            else
+                val = 0;
+            end
             
         end
         
@@ -785,11 +818,17 @@ classdef Finder < handle
             RT = radon.frt(obj.image, 'finder', obj, 'expand', obj.use_expand, 'trans', 1);
             
             obj.streak = [temp_streak obj.streak]; % combine the two streaks
-            
-            if obj.use_only_one % if you get two streaks (one for each transpose) but only want the best one
+
+    
+            if obj.use_only_one || obj.checkCoincidence % if you get two streaks (one for each transpose) but only want the best one (or if the two streaks are the same)
                 obj.streak = obj.bestStreak;
             end
-
+            
+            if length(obj.streak)>1
+                disp('found two streaks!');
+                fprintf('transposed: %d %d | S/N: %f %f\n', obj.streak(1).transposed, obj.streak(2).transposed, obj.streak(1).snr, obj.streak(2).snr);
+            end
+            
             if 0 % I don't think we need any of this...
             obj.radon_image = R./sqrt(obj.radon_var.*obj.getNormFactorPSF.*G); % this normalization makes sure the result is in units of S/N, regardless of the normalization of the PSF. 
             obj.radon_image_trans = RT./sqrt(obj.radon_var_trans.*obj.getNormFactorPSF.*GT); % one makes sure the PSF is unity normalized, the other divides by the amount of noise "under" the PSF

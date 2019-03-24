@@ -30,11 +30,15 @@ classdef Classifier < handle
     properties % switches/controls
         
         length_max = 200;
-        filter_loss_max = 0.2;
-        variability_max = 3;
-        loss_var_product_max = 0.1;
-        glint_power_max = 2.5;
-        lateral_spread_max = 2;
+        filter_loss_max = 0.1;
+        filter_delta_max = 0.5;
+        edgyness_max = 5.0;
+%         variability_max = 3; % not used
+%         loss_var_product_max = 0.1; % not used 
+        brightest_ratio_max = 0.5; 
+        saturation_value = 6e4; % lower than 2^16 since we also allow for bias subtraction... 
+        lateral_spread_max = 3.0;
+        glint_power_max = 1.5;
         
         debug_bit = 1;
         
@@ -85,48 +89,81 @@ classdef Classifier < handle
         function input(obj, streak, varargin)
             
             if streak.L>obj.length_max
-                streak.type = 'satellite';
-                streak.addNote('too long!');
+                streak.type = 'too long';
+                streak.addNote('Too long!');
                 return;
             end
-            
+                
+            if abs(mod(streak.th,90))<1
+                streak.type = 'artefact';
+                streak.addNote('Angle close to horizontal/vertical.');
+                return;
+            end
+                
             if streak.prof.filter_edge
                 streak.type = 'artefact';
-                streak.addNote('filter size is at edge of range');
+                streak.addNote('Filter size is at edge of range.');
                 return;
             end
             
             if streak.prof.filter_loss>obj.filter_loss_max 
                 streak.type = 'artefact';
-                streak.addNote(['filter loss= ' num2str(streak.prof.filter_loss)]);
+                streak.addNote(['Filter loss= ' num2str(streak.prof.filter_loss) '.']);
                 return;
             end
             
-            if streak.prof.variability>obj.variability_max
+            if streak.prof.filter_delta>obj.filter_delta_max
                 streak.type = 'artefact';
-                streak.addNote(['variablity= ' num2str(streak.prof.variability)]);
+                streak.addNote(['Filter delta= ' num2str(streak.prof.filter_delta) '.']);
                 return;
             end
             
-            if streak.prof.variability.*streak.prof.filter_loss>obj.loss_var_product_max
+            if streak.prof.fitter.chi2==0
                 streak.type = 'artefact';
-                streak.addNote(['variablity*loss= ' num2str(streak.prof.variability.*streak.prof.filter_loss)]);
+                streak.addNote('Bad fit!');
                 return;
             end
-                
-            if streak.prof.glint_power>obj.glint_power_max
+            
+            if streak.prof.edgyness>obj.edgyness_max
                 streak.type = 'artefact';
-                streak.addNote(['glint= ' num2str(streak.prof.glint_power)]);
+                streak.addNote(['Edgyness= ' num2str(streak.prof.edgyness) '.']);
                 return;
             end
-                        
+            
+%             if streak.prof.variability>obj.variability_max
+%                 streak.type = 'artefact';
+%                 streak.addNote(['variablity= ' num2str(streak.prof.variability)]);
+%                 return;
+%             end
+            
+%             if streak.prof.variability.*streak.prof.filter_loss>obj.loss_var_product_max
+%                 streak.type = 'artefact';
+%                 streak.addNote(['variablity*loss= ' num2str(streak.prof.variability.*streak.prof.filter_loss)]);
+%                 return;
+%             end
+            
+            if streak.prof.brightest_ratio>obj.brightest_ratio_max
+                if streak.prof.brightest_value>obj.saturation_value % saturated streak
+                    streak.type = 'artefact';
+                    streak.addNote(['More than ' num2str(100*streak.prof.brightest_ratio) '% of streak pixels are saturated!']);
+                    return;
+                else % this was probably close to the truncation threshold
+                    streak.addNote(['Many points on this streak have the same maximal value: ' num2str(streak.prof.brightest_value) '.']);
+                end
+            end
+
+
             if streak.prof.lateral_spread>obj.lateral_spread_max % do brighter streaks also have higher spreads??
                 streak.type = 'artefact';
-                streak.addNote(['lateral spread= ' num2str(streak.prof.lateral_spread)]);
+                streak.addNote(['Lateral spread= ' num2str(streak.prof.lateral_spread) '.']);
                 return;
             end
             
-            % add tests for amplitudes, offsets, spreads
+            if streak.prof.glint_power>obj.glint_power_max
+                streak.type = 'satellite';
+                streak.addNote(['Glint= ' num2str(streak.prof.glint_power) '.']);
+                return;
+            end
             
             % if all other tests do not fail, we must assume it is an asteroid
             streak.type = 'asteroid';
@@ -146,13 +183,17 @@ classdef Classifier < handle
                 SNR = streaks(ii).snr;
                 L = round(streaks(ii).L);
                 loss = streaks(ii).prof.filter_loss;
+                edgy = streaks(ii).prof.edgyness;
                 star = ' '; 
                 if streaks(ii).prof.filter_edge, star = '*'; end
                 vari = streaks(ii).prof.variability;
                 glint = streaks(ii).prof.glint_power;
                 spre = streaks(ii).prof.lateral_spread;
                 
-                fprintf('ii= % 3d f= % 3d (%-9s) | S/N= %6.2f | L= % 4d | loss= %6.4f%s | var= %6.4f | loss*var*10= %4.2f | glint= %4.2f | spread= %4.2f \n', ii, f, type, SNR, L, loss, star, vari, loss*vari*10, glint, spre);
+%                 fprintf('ii= % 3d f= % 3d (%-9s) | S/N= %6.2f | L= % 4d | loss= %6.4f%s | edgy= %6.4f | var= %6.4f | loss*var*10= %4.2f | glint= %4.2f | spread= %4.2f \n',...
+%                     ii, f, type, SNR, L, loss, star, edgy, vari, loss*vari*10, glint, spre);
+                fprintf('ii= % 3d f= % 3d (%-9s) | S/N= %6.2f | L= % 4d | loss= %6.4f%s | edgy= %6.4f | glint= %4.2f | spread= %4.2f \n',...
+                    ii, f, type, SNR, L, loss, star, edgy, glint, spre);
                 
             end
             

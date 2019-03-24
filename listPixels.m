@@ -41,6 +41,15 @@ function [xlists_cell, ylists_cell, num_pixels] = listPixels(x1,x2,y1,y2, im_siz
 
         a = (pix_y2-pix_y1)./(pix_x2-pix_x1);
         
+        if pix_x1<1, pix_x1 = 1; end
+        if pix_x1>im_size(2); pix_x1 = im_size(2); end
+        if pix_x2<1, pix_x2 = 1; end
+        if pix_x2>im_size(2); pix_x2 = im_size(2); end
+        if pix_y1<1, pix_y1 = 1; end
+        if pix_y1>im_size(1); pix_y1 = im_size(1); end
+        if pix_y2<1, pix_y2 = 1; end
+        if pix_y2>im_size(1); pix_y2 = im_size(1); end
+        
         if isnan(a) || abs(a)>=1 % vertical (or closer to vertical) lines
             
             if pix_y1<pix_y2

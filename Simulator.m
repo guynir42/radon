@@ -86,6 +86,8 @@ classdef Simulator < handle
         use_psf = 1; % if you want to convolve the image with a PSF        
         psf_sigma = 2; % width prameter of the Gaussian PSF
         use_external_psf = 0; % if you don't want to generate a simple, symmetric Gaussian, must input a "psf" yourself
+        use_smooth_model = 1;
+        smooth_oversampling = 4;
         
         use_random = 0; % generate random streak coordinates each time 
         num_random_streaks = 1; % how many random streaks to be made in each image
@@ -96,6 +98,7 @@ classdef Simulator < handle
         angle_range = [0 180]; % degrees
         
         use_finder = 1; % if you only want to make streak images, without directly sending them to the Finder
+        use_profiler = 0; % if you want to activate each streak's profiler. 
         
         use_update_finder = 1; % give correct parameters to finder. should most likely leave this on
         
@@ -684,9 +687,8 @@ classdef Simulator < handle
 %             if obj.finder.noise_var~=obj.bg_noise_var
 %                 obj.finder.makeVarMap(obj.bg_noise_var);
 %             end
-            
             obj.finder.input_var = obj.bg_noise_var;
-            obj.finder.input_psf = obj.psf;
+            obj.finder.input_psf = obj.psf_sigma;
                         
         end
         
@@ -707,6 +709,11 @@ classdef Simulator < handle
                 
                 obj.finder.input(obj.image_final);
                 
+                if obj.use_profiler && ~isempty(obj.finder.streak)
+                    obj.finder.streak.original_image = obj.image_final;
+                    obj.finder.streak.prof.input;
+                end
+                
             end
             
             if ~isempty(obj.gui) && obj.gui.check
@@ -718,7 +725,13 @@ classdef Simulator < handle
         function makeImage(obj) % fills the three images in turn: line, conv, final
             
             obj.drawLine;
-            obj.runConv;
+            
+            if obj.use_smooth_model
+                obj.runModel;
+            else
+                obj.runConv;
+            end
+            
             obj.addNoise;
             
         end
@@ -763,8 +776,21 @@ classdef Simulator < handle
                 end
                 
                 obj.image_line(idx) = obj.image_line(idx) + I(ii)./obj.trig_factor(ii); % intensity is per unit length (diagonal lines have a longer length in each pixel...)
-                
+
             end
+            
+        end
+        
+        function runModel(obj)
+       
+%             counts = util.stat.sum2(obj.image_line);
+            
+            x1 = obj.x1.*obj.im_size(2);
+            x2 = obj.x2.*obj.im_size(2);
+            y1 = obj.y1.*obj.im_size(1);
+            y2 = obj.y2.*obj.im_size(1);
+
+            obj.image_conv = obj.intensity.*radon.model(obj.im_size, x1, x2, y1, y2, obj.psf_sigma,0, 1e-10, obj.smooth_oversampling); 
             
         end
         
@@ -857,19 +883,19 @@ classdef Simulator < handle
                 I = util.img.pad2size(I, obj.im_size+margin_pix*2);
                 xval = -margin_pix(2)+2:obj.im_size(2)+margin_pix(2)+1;
                 yval = -margin_pix(1)+2:obj.im_size(1)+margin_pix(1)+1;
-                util.plot.show(I, varargin{:}, 'xvalues', xval, 'yvalues', yval);
+                util.plot.show(I, varargin{:}, 'xvalues', xval, 'yvalues', yval, 'ax', ax);
             else
-                util.plot.show(I, varargin{:});
+                util.plot.show(I, varargin{:}, 'ax', ax);
             end
             
             % get the Finder results and show them also
             if obj.use_finder && ~isempty(obj.finder) && ~isempty(obj.finder.streak)
                 
                 for ii = 1:length(obj.finder.streak)
-                    obj.finder.streak(ii).drawGuidelines(ax, obj.im_size, 15, 'White', use_publishable);
+                    obj.finder.streak(ii).drawGuidelines('ax', ax, 'size', obj.im_size, 'line', 15, 'publish', use_publishable);
                 end
                 
-                obj.finder.streak(1).drawStats(ax, font_size);
+                obj.finder.streak(1).drawStats('ax', ax, 'fontsize', font_size);
                 
             else
                 delete(findobj(ax, 'type', 'line'));

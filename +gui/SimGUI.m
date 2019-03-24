@@ -190,7 +190,7 @@ classdef SimGUI < handle
                 
         function c = check(obj)
            
-            c = ~isempty(obj.panel_image) && isvalid(obj.panel_image);
+            c = ~isempty(obj) && ~isempty(obj.panel_image) && isvalid(obj.panel_image);
             
         end
         

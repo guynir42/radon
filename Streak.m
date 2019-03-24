@@ -87,10 +87,6 @@ classdef Streak < handle
 %         fit_slope;
 %         fit_residual;
         
-        % classifier results
-%         is_asteroid = 1; % this includes comets, of course
-%         is_satellite = 0; % this includes LEO and high orbit satellites (maybe add a classification later?)
-%         is_artefact = 0; % all other non-astronomical stuff
         type = '';
         notes = {};
         
@@ -103,9 +99,11 @@ classdef Streak < handle
         midpoint_x; % just (x1+x2)/2
         midpoint_y; % just (y1+y2)/2
         
-        is_asteroid;
-        is_artefact;
-        is_satellite;
+        % classifier results
+        is_asteroid; % real NEOs (probably)
+        is_too_long; % artefacts, image edges, LEO satellites. Anything too long to go to further analysis
+        is_artefact; % all the stuff the has wrong width etc
+        is_satellite; % passed all the tests but is glinting (most likely a high Earth orbit satellite)
         
     end
         
@@ -114,7 +112,7 @@ classdef Streak < handle
         noise_var = 1; % estimate of average noise variance 
         psf_sigma = 2; % estimate of PSF width parameter (assumed Gaussian)
         
-        subtract_psf_widths = 5; % if not given by Finder, this tells "subtractStreak" how many PSF widths to remove around the streak position
+        subtract_psf_widths = 3; % if not given by Finder, this tells "subtractStreak" how many PSF widths to remove around the streak position
         
         debug_bit = 1;
         
@@ -128,7 +126,28 @@ classdef Streak < handle
         num_snr_peak_region = 2; % how many S/N units below maximum is still inside the peak region
         peak_region; % a map of the peak region, with only the part above the cut (peak-num_snr_peak_region) not zeroed out (used for error estimates)
         
-        version = 1.04;
+        x1_frt;
+        x2_frt;
+        y1_frt;
+        y2_frt;
+        I_frt;
+        snr_frt;
+        
+        x1_fit;
+        x2_fit;
+        y1_fit;
+        y2_fit;
+        I_fit;
+        snr_fit;
+        
+        psf_pixel = 0.5;
+        
+%         x1_subtraction;
+%         x2_subtraction;
+%         y1_subtraction;
+%         y2_subtraction;
+        
+        version = 1.05;
         
     end
     
@@ -218,6 +237,12 @@ classdef Streak < handle
             
         end
         
+        function val = get.is_too_long(obj)
+            
+            val = util.text.cs(obj.type, 'too long');
+            
+        end
+        
         function val = get.is_satellite(obj)
             
             val = util.text.cs(obj.type, 'satellite');
@@ -236,13 +261,21 @@ classdef Streak < handle
                 val = 'white';
             elseif obj.is_asteroid
                 val = 'red';
-            elseif obj.is_satellite
+            elseif obj.is_too_long
                 val = 'black';
             elseif obj.is_artefact
                 val = 'green';
+            elseif obj.is_satellite
+                val = 'magenta';
             else
                 val = 'white'; % default?
             end 
+            
+        end
+        
+        function val = psf_sigma_effective(obj) % adding the extra 0.25 for the pixel width 
+            
+            val = sqrt(obj.psf_pixel.^2 + obj.psf_sigma.^2);
             
         end
         
@@ -290,7 +323,7 @@ classdef Streak < handle
             obj.radon_y = obj.radon_max_idx(1);
             obj.radon_dy = obj.radon_max_idx(3) - ceil(size(obj.subframe,3)/2);
             
-            % calculate everything assuming there was no transform...
+            % calculate everything assuming there was no transpose...
             obj.x1 = obj.radon_x1;
             obj.x2 = obj.radon_x2;
             obj.a = obj.radon_dy/obj.radon_dx;
@@ -347,6 +380,19 @@ classdef Streak < handle
                 
             end
             
+            % original coordinates and intensity from FRT (if later calculations update them)
+            obj.x1_frt = obj.x1;
+            obj.x2_frt = obj.x2;
+            obj.y1_frt = obj.y1;
+            obj.y2_frt = obj.y2;
+            obj.I_frt = obj.I;
+            obj.snr_frt = obj.snr;
+
+%             obj.x1_subtraction = obj.x1;
+%             obj.x2_subtraction = obj.x2;
+%             obj.y1_subtraction = obj.y1;
+%             obj.y2_subtraction = obj.y2;
+
             % pixel values are rounded to nearest pixel
             obj.b = round(obj.b);
             obj.x1 = round(obj.x1);
@@ -374,24 +420,50 @@ classdef Streak < handle
                 end
             end
             
+            M_sub = input.image;
+            im_size = util.vec.imsize(M_sub);
+
+            x1 = obj.x1 + input.offset(2);
+            x2 = obj.x2 + input.offset(2);
+            y1 = obj.y1 + input.offset(1);
+            y2 = obj.y2 + input.offset(1);
+            
+            mask = ~isnan(radon.model(im_size, x1, x2, y1, y2, input.width, NaN, [], 0));
+            
+            M_sub(mask) = input.replace;
+            return;
+            
             % these are really rough estimates. Can improve this by looking at the error ellipse and subtracting y and dy values inside that range only 
             shift = floor(-obj.psf_sigma*input.width):ceil(obj.psf_sigma*input.width);
 %             dy = -obj.psf_sigma*width:obj.psf_sigma*width;
             
-            M_sub = input.image;
-            
             for ii = 1:length(shift)
 
-                if obj.transposed
-                    x1 = obj.x1 + shift(ii);
-                    x2 = obj.x2 + shift(ii);
-                    y1 = obj.y1;
-                    y2 = obj.y2;
-                else
-                    x1 = obj.x1;
-                    x2 = obj.x2;
-                    y1 = obj.y1 + shift(ii);
-                    y2 = obj.y2 + shift(ii);
+                x1 = obj.x1;
+                x2 = obj.x2;
+                y1 = obj.y1;
+                y2 = obj.y2;
+                
+                if (obj.th>45 && obj.th<135) % check if after angle corrections we are still in the "transposed" region
+                    x1 = x1 + shift(ii);
+                    x2 = x2 + shift(ii);
+                    y1 = y1 - obj.psf_sigma*input.width;
+                    y2 = y2 + obj.psf_sigma*input.width;
+                elseif (obj.th<-45 && obj.th>-135)
+                    x1 = x1 + shift(ii);
+                    x2 = x2 + shift(ii);
+                    y1 = y1 + obj.psf_sigma*input.width;
+                    y2 = y2 - obj.psf_sigma*input.width;
+                elseif (obj.th<45 && obj.th>-45)
+                    y1 = y1 + shift(ii);
+                    y2 = y2 + shift(ii);
+                    x1 = x1 - obj.psf_sigma*input.width;
+                    x2 = x2 + obj.psf_sigma*input.width;
+                elseif (obj.th>135 || obj.th<-135)
+                    y1 = y1 + shift(ii);
+                    y2 = y2 + shift(ii);
+                    x1 = x1 + obj.psf_sigma*input.width;
+                    x2 = x2 - obj.psf_sigma*input.width;
                 end
                 
                 x1 = x1 + input.offset(2);
@@ -429,7 +501,7 @@ classdef Streak < handle
             
         end
         
-        function xywh = getBoxBoundaries(obj, width, height) % rectangle position vector around the streak in the original image
+        function xywh = getBoxBoundaries(obj, width, height) % rectangle position vector around the streak in the image
             
             if nargin<2 || isempty(width)
                 width = obj.L.*2;
@@ -452,23 +524,25 @@ classdef Streak < handle
         end
         
         function [I, output_offset] = getCutout(obj, varargin) % a cutout around the streak in the original image
-           
+            
             input = util.text.InputVars;
-            input.input_var('width', obj.L.*2);
+%             input.input_var('width', obj.L.*2);
+            input.input_var('width', obj.radon_dx.*3);
             input.input_var('image', []);
             input.input_var('offset', []);
             input.input_var('threshold', []);
+            input.input_var('original', 0);
             input.scan_vars(varargin{:});
             
             if isempty(input.image)
-                if ~isempty(obj.original_image)
+                if ~isempty(obj.original_image) && input.original
                     input.image = obj.original_image;
                 else
                     input.image = obj.image;
                 end
             end
             
-            if isempty(input.offset)
+            if isempty(input.offset) % this is additional offset from 
                 if all(size(input.image)==size(obj.original_image))
                     input.offset = obj.offset_original;
                 else
@@ -488,13 +562,15 @@ classdef Streak < handle
             if x2>size(input.image,2), x2 = size(input.image,2); end            
             if y2>size(input.image,1), y2 = size(input.image,1); end
             
-            I = util.img.pad2size(input.image(y1:y2, x1:x2), ceil(input.width));
-            
+%             I = util.img.pad2size(input.image(y1:y2, x1:x2), ceil(input.width));
+            I = input.image(y1:y2, x1:x2);
+
             if ~isempty(input.threshold)
                 I(I>input.threshold) = input.threshold;
             end
             
-            output_offset = input.offset + 1 - [y1,x1];
+%             output_offset = input.offset + 1 - [y1,x1];
+            output_offset = [y1,x1]; % offset between input image and cutout (not between streak coordinates and cutout coordinates!)
             
         end
         
@@ -725,15 +801,31 @@ classdef Streak < handle
         function showCutout(obj, varargin)
             
             input = util.text.InputVars;
+            input.input_var('image', []);
+            input.input_var('offset', []);
+            input.input_var('original', 0);
             input.input_var('line_dist', 10);
             input.scan_vars(varargin{:});
             
             [I, offset] = obj.getCutout(varargin{:});
             
+            if isempty(input.offset)
+                if input.original
+                    input.offset = obj.offset_original;
+                else
+                    input.offset = [0 0];
+                end
+            end
+            
+            if isempty(I)
+                I = obj.prof.image;
+                offset = obj.prof.im_offset;
+            end
+            
             util.plot.show(I, varargin{:});
             
             if ~isempty(input.line_dist)
-                obj.drawGuidelines('line_dist', input.line_dist, varargin{:}, 'size', size(I), 'offset', offset);
+                obj.drawGuidelines('line_dist', input.line_dist, varargin{:}, 'size', size(I), 'offset', input.offset - offset); % negative offset since we are closing in relative to streak coordinates
             end
             
         end
@@ -969,6 +1061,8 @@ classdef Streak < handle
             
             input = util.text.InputVars;
             input.input_var('parent', [], 'figure', 'panel');
+            input.input_var('original', 0);
+            input.input_var('dynamic_range', []);
             input.scan_vars(varargin{:});
             
             if isempty(input.parent)
@@ -978,18 +1072,28 @@ classdef Streak < handle
             delete(input.parent.Children);
             
             ax1 = axes('Parent', input.parent, 'Position', [0.00 0 0.25 1]);
-            obj.showCutout('line', 15, 'bias', 0, 'dyn', obj.threshold, varargin{:}, 'Parent', [], 'axes', ax1);
+            obj.showCutout('line', 5, 'bias', 0, 'dyn', obj.threshold*sqrt(obj.noise_var*util.stat.sum2(obj.psf)),...
+                varargin{:}, 'Parent', [], 'axes', ax1);
             colorbar(ax1, 'off');
             title(ax1, '');
             obj.drawStats('ax', ax1);
             xlabel(ax1, 'image cutout');
+            
+            if input.dynamic_range
+                ax1.CLim = [0 input.dynamic_range];
+            elseif input.original
+                ax1.CLim = [0 obj.threshold];
+            end
             
             ax2 = axes('Parent', input.parent, 'Position', [0.25 0 0.25 1]);
             obj.prof.plotLateralProfile(varargin{:}, 'Parent', [], 'axes', ax2);
             axis(ax2, 'square');
             ax2.YTick = [];
             ylabel(ax2, '');
-            ax2.XTick = ax2.XTick(2:end);
+%             ax2.XTick = ax2.XTick(2:end);
+            if ~isempty(obj.notes)
+                title(ax2, ['notes: ' obj.notes{1}]);
+            end
             
             ax3 = axes('Parent', input.parent, 'Position', [0.50 0 0.25 1]);
             obj.prof.plotAmplitudes(varargin{:}, 'Parent', [], 'axes', ax3);
@@ -1035,6 +1139,26 @@ classdef Streak < handle
         function addNote(obj, str)
             
             obj.notes{end+1} = str;
+            
+        end
+        
+        function str_out = printout(obj)
+            
+            type = obj.type;
+            if abs(mod(obj.th,90))<1
+                type = [type '*'];
+            end
+            
+            str = sprintf('file: %s | frame: % 3d | type: % 10s | mid x,y: %6.1f, %6.1f | L= %6.1f | theta= %6.2f | count= %7.1f | S/N= %5.1f | thresh= % 4d | psf_sigma= %4.2f | noise_var= %4.2f | notes: ', ...
+                obj.filename, obj.frame_num, type, obj.midpoint_x, obj.midpoint_y, obj.L, obj.th, obj.count, obj.snr, obj.threshold, obj.psf_sigma, obj.noise_var);
+            
+            for ii = 1:length(obj.notes)
+                str = [str obj.notes{ii}];
+            end
+            
+            if nargout>0
+                str_out = str;
+            end
             
         end
         

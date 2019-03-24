@@ -14,6 +14,9 @@ function [R, finder] = frt(M_in, varargin)
 %   faster, so the default is 1. 
 %   -threads: to be depricated (it doesn't speed things up). 
 
+%     util.plot.show(M_in);
+%     pause(3);
+
     import util.text.cs;
     import util.text.parse_bool;
     import util.text.print_size;
